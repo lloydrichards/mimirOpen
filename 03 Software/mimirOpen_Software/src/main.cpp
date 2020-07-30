@@ -1,9 +1,27 @@
 #include <Arduino.h>
+#include <mimirOpen.h>
 
-void setup() {
-  // put your setup code here, to run once:
+mimirOpen mimir(115200);
+
+void setup()
+{
+  mimir.initSPIFFS();
+  mimir.i2cScanner();
+  mimir.initMicroSD();
+  mimir.initSensors();
+  mimir.initWIFI();
+  //mimir.initPixels();
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+void loop()
+{
+  mimir.readSensors();
+  mimir.printSensors();
+  mimir.logData(mimir.stringData());
+
+  mimir.WiFi_ON();
+  mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/sensorData/add");
+  mimir.WiFi_OFF();
+  //mimir.testPixels();
+  delay(300000);
 }
