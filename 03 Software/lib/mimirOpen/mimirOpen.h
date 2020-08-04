@@ -1,5 +1,5 @@
-#ifndef mimirHEAD_h
-#define mimirHEAD_h
+#ifndef mimirOpen_h
+#define mimirOpen_h
 
 #include "Arduino.h"
 #include <Wire.h>
@@ -15,18 +15,41 @@
 #define addrbmp280 0x76
 #define addrCompass 0X0C
 
-class mimirHEAD
+struct config {
+    String userName;
+    String password;
+    String deviceName;
+    
+};
+
+struct envData {
+float temp;
+float humidity;
+float pressure;
+float altitude;
+float luminance;
+float iaq;
+float eVOC;
+float eCO2;
+
+int bearing;
+};
+
+class mimirOpen
 {
 
 public:
-    mimirHEAD(int baudRate = 115200);
+    mimirOpen(int baudRate = 115200);
 
+    //Init
     void initPixels(int brightness = 64);
     void initSensors();
     void initMicroSD();
     void initWIFI();
     void initSPIFFS();
 
+    //Main
+    void saveToSPIFFS();
     void sendData(String address);
     void readSensors();
     void printSensors();
@@ -77,14 +100,13 @@ private:
     int16_t compassX;
     int16_t compassY;
     int16_t compassZ;
-    float bearing;
+    int bearing;
 
     double avgTemp;
     int avgHum;
 
     String packageJSON();
     void createFileName(char date[]);
-    void saveConfig();
     bool SetupTime();
     bool UpdateLocalTime();
     static void WiFiCallback(WiFiManager *myWiFiManager);

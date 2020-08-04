@@ -1,4 +1,4 @@
-#include "mimirHEAD.h"
+#include "mimirOpen.h"
 #include <FS.h> //this needs to be first, or it all crashes and burns...
 #include "SPIFFS.h"
 #include <Wire.h>
@@ -54,12 +54,12 @@ RgbColor lightBlue(0, 25, 25);
 RgbColor white(128);
 RgbColor black(0);
 
-mimirHEAD::mimirHEAD(int baudRate)
+mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
 }
 
-void mimirHEAD::initPixels(int brightness)
+void mimirOpen::initPixels(int brightness)
 {
     Serial.println("Starting Pixels...");
     pixel.Begin();
@@ -67,7 +67,7 @@ void mimirHEAD::initPixels(int brightness)
     pixel.SetBrightness(brightness);
 }
 
-void mimirHEAD::initSensors()
+void mimirOpen::initSensors()
 {
     sht31_L.begin(addrSHT31D_L) ? Serial.println("SHT31_L Success!") : Serial.println("SHT31_L Failed!");
     sht31_H.begin(addrSHT31D_H) ? Serial.println("SHT31_H Success!") : Serial.println("SHT31_H Failed!");
@@ -99,7 +99,7 @@ void mimirHEAD::initSensors()
     bmp280.begin(addrbmp280) ? Serial.println("BMP280 Success!") : Serial.println("BMP280 Failed!");
 }
 
-void mimirHEAD::initMicroSD()
+void mimirOpen::initMicroSD()
 {
     spiSD.begin(14, 2, 15, 13);
     Serial.println("Initializing SD card...");
@@ -123,7 +123,7 @@ void mimirHEAD::initMicroSD()
     }
     file.close();
 }
-void mimirHEAD::initWIFI()
+void mimirOpen::initWIFI()
 {
     WiFiManagerParameter custom_USER("User Name", "User Name", _USER, 40);
     WiFiManagerParameter custom_USER_ID("User ID", "User ID", _USER_ID, 40);
@@ -137,7 +137,7 @@ void mimirHEAD::initWIFI()
 
     wifiManager.setAPCallback(WiFiCallback);
 
-    wifiManager.autoConnect("mimirHEAD WIFI");
+    wifiManager.autoConnect("mimirOpen WIFI");
 
     if (WiFi.status() == WL_CONNECTED)
     {
@@ -149,16 +149,14 @@ void mimirHEAD::initWIFI()
     strcpy(_USER, custom_USER.getValue());
     strcpy(_USER_ID, custom_USER_ID.getValue());
     strcpy(_DEVICE_ID, custom_DEVICE_ID.getValue());
-
-    saveConfig();
+    saveToSPIFFS();
     WiFi_OFF();
 }
 
-void mimirHEAD::initSPIFFS()
+void mimirOpen::initSPIFFS()
 {
     if (SPIFFS.begin())
     {
-
         Serial.println("mounted file system");
         if (SPIFFS.exists("/config.json"))
         {
@@ -203,7 +201,7 @@ void mimirHEAD::initSPIFFS()
 ///////////////////MAIN FUNCTIONS//////////////////
 ///////////////////////////////////////////////////
 
-void mimirHEAD::readSensors()
+void mimirOpen::readSensors()
 {
     uint16_t eco2, etvoc, errstat, raw;
 
@@ -246,7 +244,25 @@ void mimirHEAD::readSensors()
     }
 }
 
-void mimirHEAD::printSensors()
+void mimirOpen::saveToSPIFFS()
+{
+    DynamicJsonDocument newConfigJson(1024);
+    newConfigJson["User"] = _USER;
+    newConfigJson["UserID"] = _USER_ID;
+    newConfigJson["DeviceID"] = _DEVICE_ID;
+
+    fs::File configFile = SPIFFS.open("/config.json", "w");
+    if (!configFile)
+    {
+        Serial.println("failed to open config file for writing");
+    }
+
+    //serializeJson(newConfigJson, Serial);
+    serializeJson(newConfigJson, configFile);
+    configFile.close();
+}
+
+void mimirOpen::printSensors()
 {
     Serial.println("SHT31 Low:");
     Serial.print(temp1);
@@ -285,7 +301,7 @@ void mimirHEAD::printSensors()
     Serial.println(bearing);
 }
 
-void mimirHEAD::sendData(String address)
+void mimirOpen::sendData(String address)
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
@@ -312,7 +328,7 @@ void mimirHEAD::sendData(String address)
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
 
-void mimirHEAD::writeFile(fs::FS &fs, const char *path, const char *message)
+void mimirOpen::writeFile(fs::FS &fs, const char *path, const char *message)
 {
     Serial.printf("Writing file: %s\n", path);
     File file = fs.open(path, FILE_WRITE);
@@ -325,7 +341,7 @@ void mimirHEAD::writeFile(fs::FS &fs, const char *path, const char *message)
     file.close();
 }
 
-void mimirHEAD::appendFile(fs::FS &fs, const char *path, const char *message)
+void mimirOpen::appendFile(fs::FS &fs, const char *path, const char *message)
 {
     Serial.printf("Appending to file: %s\n", path);
     File file = fs.open(path, FILE_APPEND);
@@ -338,7 +354,7 @@ void mimirHEAD::appendFile(fs::FS &fs, const char *path, const char *message)
     file.close();
 }
 
-void mimirHEAD::logData(String data)
+void mimirOpen::logData(String data)
 {
 
     Serial.print("Save data: ");
@@ -355,7 +371,7 @@ void mimirHEAD::logData(String data)
     appendFile(SD, filename, data.c_str());
 }
 
-String mimirHEAD::packageJSON()
+String mimirOpen::packageJSON()
 {
     DynamicJsonDocument package(1024);
     String output;
@@ -395,7 +411,7 @@ String mimirHEAD::packageJSON()
     return output;
 }
 
-String mimirHEAD::stringData()
+String mimirOpen::stringData()
 {
     return String(DateStr) + "," +
            String(TimeStr) + "," +
@@ -416,7 +432,7 @@ String mimirHEAD::stringData()
            String(bearing) + "\r\n";
 }
 
-void mimirHEAD::WiFiCallback(WiFiManager *myWiFiManager)
+void mimirOpen::WiFiCallback(WiFiManager *myWiFiManager)
 {
     Serial.println("-WiFiConfig-");
     Serial.println("----Mode----");
@@ -427,7 +443,7 @@ void mimirHEAD::WiFiCallback(WiFiManager *myWiFiManager)
     Serial.print(WiFi.softAPIP());
 }
 
-void mimirHEAD::WiFi_ON()
+void mimirOpen::WiFi_ON()
 {
 
     WiFiManager wifiManager;
@@ -435,15 +451,14 @@ void mimirHEAD::WiFi_ON()
     wifi_signal = WiFi.RSSI();
     SetupTime();
 };
-void mimirHEAD::WiFi_OFF()
+void mimirOpen::WiFi_OFF()
 {
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
 };
 
-void mimirHEAD::SLEEP()
+void mimirOpen::SLEEP()
 {
-    saveConfig();
     //CONFIG Sleep Pin
     Serial.println("Config Sleep Pin");
     gpio_pullup_en(GPIO_NUM_39);    // use pullup on GPIO
@@ -468,25 +483,7 @@ void mimirHEAD::SLEEP()
     esp_deep_sleep_start();
 }
 
-void mimirHEAD::saveConfig()
-{
-    DynamicJsonDocument newConfigJson(1024);
-    newConfigJson["User"] = _USER;
-    newConfigJson["UserID"] = _USER_ID;
-    newConfigJson["DeviceID"] = _DEVICE_ID;
-
-    fs::File configFile = SPIFFS.open("/config.json", "w");
-    if (!configFile)
-    {
-        Serial.println("failed to open config file for writing");
-    }
-
-    //serializeJson(newConfigJson, Serial);
-    serializeJson(newConfigJson, configFile);
-    configFile.close();
-}
-
-bool mimirHEAD::SetupTime()
+bool mimirOpen::SetupTime()
 {
     configTime(0, 0, "ch.pool.ntp.org", "time.nist.gov");
     setenv("TZ", TZ_INFO, 1);
@@ -495,7 +492,7 @@ bool mimirHEAD::SetupTime()
     return TimeStatus;
 }
 
-bool mimirHEAD::UpdateLocalTime()
+bool mimirOpen::UpdateLocalTime()
 {
     struct tm timeinfo;
     char output[30], day_output[30];
@@ -517,7 +514,7 @@ bool mimirHEAD::UpdateLocalTime()
     return true;
 }
 
-void mimirHEAD::createFileName(char date[])
+void mimirOpen::createFileName(char date[])
 {
     filename[1] = date[0];
     filename[2] = date[1];
@@ -534,7 +531,7 @@ void mimirHEAD::createFileName(char date[])
 /////////////////TESTING FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
 
-void mimirHEAD::i2cScanner()
+void mimirOpen::i2cScanner()
 {
     byte error, address;
     int nDevices;
@@ -567,7 +564,7 @@ void mimirHEAD::i2cScanner()
         Serial.println("done\n");
 }
 
-void mimirHEAD::testPixels(int repeat, int _delay)
+void mimirOpen::testPixels(int repeat, int _delay)
 {
     Serial.println("Testing Pixels...");
     for (int i = 0; i < PIXEL_COUNT; i++)
@@ -620,7 +617,7 @@ void mimirHEAD::testPixels(int repeat, int _delay)
     }
 }
 
-void mimirHEAD::testHTTPRequest(String address)
+void mimirOpen::testHTTPRequest(String address)
 {
 
     if ((WiFi.status() == WL_CONNECTED))
