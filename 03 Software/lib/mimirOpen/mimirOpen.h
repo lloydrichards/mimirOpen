@@ -18,10 +18,10 @@
 enum SYS_STATUS
 {
     ERROR_L = -3,
-    ERROR_R =-2,
-    ERROR_W =-1,
-    UNMOUNTED =0,
-    OKAY =1
+    ERROR_R = -2,
+    ERROR_W = -1,
+    UNMOUNTED = 0,
+    OKAY = 1
 };
 
 struct config
@@ -81,13 +81,13 @@ public:
 
     //Main
     void saveToSPIFFS(config data);
-    void sendData(String address, envData data, systems SYS_STATUS, auth user);
+    void sendData(String address, envData data, systems sys, auth user);
     envData readSensors();
     void printSensors(envData data);
-    void logData(envData data, systems SYS_STATUS);
+    void logData(envData data, systems sys);
 
     //Helping
-    String stringData(envData data, systems SYS_STATUS);
+    String stringData(envData data, systems sys);
     void WiFi_ON();
     void WiFi_OFF();
     void SLEEP();

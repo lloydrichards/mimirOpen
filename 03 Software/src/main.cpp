@@ -17,9 +17,14 @@ mimirOpen mimir(115200);
 
 void setup()
 {
-
+config config = mimir.initSPIFFS(); 
  mimir.initMicroSD();
- mimir.initSPIFFS();  
+ mimir.initSensors();
+
+ envData data = mimir.readSensors();
+ mimir.printSensors(data);
+
+ mimir.logData(data);
  Serial.println("**FINISHED**");
 }
 

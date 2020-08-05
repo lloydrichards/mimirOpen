@@ -57,6 +57,7 @@ RgbColor black(0);
 mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
+    StartTime = millis();
 }
 
 void mimirOpen::initPixels(int brightness)
