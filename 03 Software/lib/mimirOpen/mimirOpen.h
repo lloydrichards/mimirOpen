@@ -15,13 +15,13 @@
 #define addrbmp280 0x76
 #define addrCompass 0X0C
 
-enum STATUS
+enum SYS_STATUS
 {
-    ERROR_LOADING = -3,
-    ERROR_R,
-    ERROR_W,
-    UNMOUNTED,
-    OK
+    ERROR_L = -3,
+    ERROR_R =-2,
+    ERROR_W =-1,
+    UNMOUNTED =0,
+    OKAY =1
 };
 
 struct config
@@ -42,15 +42,15 @@ struct auth
 
 struct systems
 {
-    STATUS battery;
+    SYS_STATUS battery;
     int batteryPercent;
-    STATUS wifi;
-    STATUS sd;
-    STATUS server;
-    STATUS BME680;
-    STATUS COMPAS;
-    STATUS SHT31;
-    STATUS VEML6030;
+    SYS_STATUS wifi;
+    SYS_STATUS sd;
+    SYS_STATUS server;
+    SYS_STATUS BME680;
+    SYS_STATUS COMPAS;
+    SYS_STATUS SHT31;
+    SYS_STATUS VEML6030;
 };
 
 struct envData
@@ -77,17 +77,17 @@ public:
     void initSensors();
     void initMicroSD();
     void initWIFI(config config);
-    void initSPIFFS();
+    config initSPIFFS();
 
     //Main
     void saveToSPIFFS(config data);
-    void sendData(String address, envData data, systems status, auth user);
+    void sendData(String address, envData data, systems SYS_STATUS, auth user);
     envData readSensors();
     void printSensors(envData data);
-    void logData(envData data, systems status);
+    void logData(envData data, systems SYS_STATUS);
 
     //Helping
-    String stringData(envData data, systems status);
+    String stringData(envData data, systems SYS_STATUS);
     void WiFi_ON();
     void WiFi_OFF();
     void SLEEP();
@@ -137,7 +137,7 @@ private:
     int avgHum;
 
     float averageValue(float values[]);
-    String packageJSON(envData data, systems status, auth user);
+    String packageJSON(envData data, systems SYS_STATUS, auth user);
     String header();
     void createFileName(char date[]);
     bool SetupTime();

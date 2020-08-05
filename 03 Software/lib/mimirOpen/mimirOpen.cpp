@@ -154,8 +154,9 @@ void mimirOpen::initWIFI(config _config)
     WiFi_OFF();
 }
 
-void mimirOpen::initSPIFFS()
+config mimirOpen::initSPIFFS()
 {
+    config newConfig;
     if (SPIFFS.begin())
     {
         Serial.println("mounted file system");
@@ -176,15 +177,17 @@ void mimirOpen::initSPIFFS()
                 DeserializationError error = deserializeJson(configJson, buf.get());
                 if (error)
                 {
-                    Serial.println("failed to load json config");
-                    return;
+                    Serial.println("ERROR load json config");
+                    return newConfig;
                 }
                 Serial.println("\nparsed json");
                 serializeJson(configJson, Serial);
 
-                strcpy(_USER, configJson["User"] | "N/A");
-                strcpy(_USER_ID, configJson["UserID"] | "N/A");
-                strcpy(_DEVICE_ID, configJson["DeviceID"] | "N/A");
+                newConfig.userName = configJson["userName"].as<String>();
+                newConfig.password = configJson["password"].as<String>();
+                newConfig.deviceName = configJson["deviceName"].as<String>();
+                newConfig.userId = configJson["userId"].as<String>();
+                newConfig.deviceId = configJson["deviceId"].as<String>();
             }
             else
             {
@@ -196,6 +199,7 @@ void mimirOpen::initSPIFFS()
     {
         Serial.println("failed to mount FS");
     }
+    return newConfig;
 }
 
 ///////////////////////////////////////////////////
@@ -249,9 +253,11 @@ envData mimirOpen::readSensors()
 void mimirOpen::saveToSPIFFS(config data)
 {
     DynamicJsonDocument newConfigJson(1024);
-    newConfigJson["User"] = _USER;
-    newConfigJson["UserID"] = _USER_ID;
-    newConfigJson["DeviceID"] = _DEVICE_ID;
+    newConfigJson["userName"] = data.userName;
+    newConfigJson["password"] = data.password;
+    newConfigJson["deviceName"] = data.deviceName;
+    newConfigJson["userId"] = data.userId;
+    newConfigJson["deviceId"] = data.deviceId;
 
     fs::File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile)
@@ -317,7 +323,7 @@ float mimirOpen::averageValue(float values[])
 {
     float sum;
     int total = 0;
-    for (int i = 0; i < sizeof(values); i++)
+    for (int i = 0; i < int(sizeof(values)); i++)
     {
         if (isnan(values[i]) || values[i] != 0)
         {
@@ -455,26 +461,7 @@ String mimirOpen::stringData(envData data, systems status)
 
 String mimirOpen::header()
 {
-    String output = "date," +
-                    "time," +
-                    "battery," +
-                    "batteryPercent," +
-                    "wifi," +
-                    "sd," +
-                    "server," +
-                    "BME680," +
-                    "COMPAS," +
-                    "SHT31," +
-                    "VEML6030," +
-                    "temperature," +
-                    "humidity," +
-                    "pressure," +
-                    "altitude," +
-                    "luminance," +
-                    "iaq," +
-                    "eVOC," +
-                    "eCO2," +
-                    "bearing" + "\r\n";
+    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,eVOC,eCO2,bearing\r\n";
     return output;
 }
 
