@@ -123,20 +123,21 @@ void mimirOpen::initMicroSD()
     }
     file.close();
 }
-void mimirOpen::initWIFI()
+void mimirOpen::initWIFI(config _config)
 {
-    WiFiManagerParameter custom_USER("User Name", "User Name", _USER, 40);
-    WiFiManagerParameter custom_USER_ID("User ID", "User ID", _USER_ID, 40);
-    WiFiManagerParameter custom_DEVICE_ID("Device ID", "Device ID", _DEVICE_ID, 40);
+    config newConfig;
+
+    WiFiManagerParameter custom_USER_NAME("User Name", "User Name", _config.userName.c_str(), 40);
+    WiFiManagerParameter custom_PASSWORD("Password", "Password", "", 40);
+    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", _config.deviceName.c_str(), 40);
 
     WiFiManager wifiManager;
 
-    wifiManager.addParameter(&custom_USER);
-    wifiManager.addParameter(&custom_USER_ID);
-    wifiManager.addParameter(&custom_DEVICE_ID);
+    wifiManager.addParameter(&custom_USER_NAME);
+    wifiManager.addParameter(&custom_PASSWORD);
+    wifiManager.addParameter(&custom_DEVICE_NAME);
 
     wifiManager.setAPCallback(WiFiCallback);
-
     wifiManager.autoConnect("mimirOpen WIFI");
 
     if (WiFi.status() == WL_CONNECTED)
@@ -144,12 +145,12 @@ void mimirOpen::initWIFI()
         wifi_signal = WiFi.RSSI();
         SetupTime();
     }
-
     //Update Device Info with Params
-    strcpy(_USER, custom_USER.getValue());
-    strcpy(_USER_ID, custom_USER_ID.getValue());
-    strcpy(_DEVICE_ID, custom_DEVICE_ID.getValue());
-    saveToSPIFFS();
+    newConfig.userName = custom_USER_NAME.getValue();
+    newConfig.password = custom_PASSWORD.getValue();
+    newConfig.deviceName = custom_DEVICE_NAME.getValue();
+
+    saveToSPIFFS(newConfig);
     WiFi_OFF();
 }
 
@@ -201,13 +202,13 @@ void mimirOpen::initSPIFFS()
 ///////////////////MAIN FUNCTIONS//////////////////
 ///////////////////////////////////////////////////
 
-void mimirOpen::readSensors()
+envData mimirOpen::readSensors()
 {
+    envData data;
     uint16_t eco2, etvoc, errstat, raw;
+    float tempArr[] = {sht31_L.readTemperature(), sht31_H.readTemperature(), bmp280.readTemperature()};
+    data.temperature = averageValue(tempArr);
 
-    temp1 = (float)sht31_L.readTemperature();
-    temp2 = (float)sht31_H.readTemperature();
-    temp3 = (float)bmp280.readTemperature();
     hum1 = (float)sht31_L.readHumidity();
     hum2 = (float)sht31_H.readHumidity();
 
@@ -242,9 +243,10 @@ void mimirOpen::readSensors()
         compassZ = compass.z();
         bearing = ((atan2(compassY, compassX)) * 180) / PI; //values will range from +180 to -180 degrees
     }
+    return data;
 }
 
-void mimirOpen::saveToSPIFFS()
+void mimirOpen::saveToSPIFFS(config data)
 {
     DynamicJsonDocument newConfigJson(1024);
     newConfigJson["User"] = _USER;
@@ -262,50 +264,33 @@ void mimirOpen::saveToSPIFFS()
     configFile.close();
 }
 
-void mimirOpen::printSensors()
+void mimirOpen::printSensors(envData data)
 {
-    Serial.println("SHT31 Low:");
-    Serial.print(temp1);
-    Serial.println("C");
-    Serial.print(hum1);
-    Serial.println("%");
-    Serial.println("SHT31 High:");
-    Serial.print(temp2);
-    Serial.println("C");
-    Serial.print(hum2);
-    Serial.println("%");
-    Serial.println("BME280:");
-    Serial.print(temp3);
-    Serial.println("C");
-    Serial.print(pres);
-    Serial.println("hPa");
-    Serial.print(alt);
-    Serial.println("m");
-    Serial.println("VEML6030:");
-    Serial.print(lux);
-    Serial.println("lux");
-    Serial.println("VEML6075:");
-    Serial.print("uvA");
-    Serial.println(uvA);
-    Serial.print("uvB");
-    Serial.println(uvB);
-    Serial.print("uvIndex");
-    Serial.println(uvIndex);
-    Serial.println("CCS811:");
-    Serial.print(eCO2);
-    Serial.println("ppm");
-    Serial.print(tVOC);
-    Serial.println("ppb");
-    Serial.println(ccs811.errstat_str(ccs811ERROR));
-    Serial.println("Compass:");
-    Serial.println(bearing);
+    Serial.print("Temp: ");
+    Serial.println(data.temperature);
+    Serial.print("Humi: ");
+    Serial.println(data.humidity);
+    Serial.print("Pres: ");
+    Serial.println(data.pressure);
+    Serial.print("Alt: ");
+    Serial.println(data.altitude);
+    Serial.print("Lux: ");
+    Serial.println(data.luminance);
+    Serial.print("IAQ: ");
+    Serial.println(data.iaq);
+    Serial.print("eVOC: ");
+    Serial.println(data.eVOC);
+    Serial.print("eCO2: ");
+    Serial.println(data.eCO2);
+    Serial.print("Bearing: ");
+    Serial.println(data.bearing);
 }
 
-void mimirOpen::sendData(String address)
+void mimirOpen::sendData(String address, envData data, systems status, auth user)
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
-        String package = packageJSON();
+        String package = packageJSON(data, status, user);
         HTTPClient http;
         http.begin(address);
         http.addHeader("Content-Type", "application/json");
@@ -327,6 +312,26 @@ void mimirOpen::sendData(String address)
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+
+float mimirOpen::averageValue(float values[])
+{
+    float sum;
+    int total = 0;
+    for (int i = 0; i < sizeof(values); i++)
+    {
+        if (isnan(values[i]) || values[i] != 0)
+        {
+            sum += values[i];
+            total += 1;
+        }
+    }
+    if (total > 0)
+    {
+        return sum / total;
+    }
+    else
+        return 0;
+};
 
 void mimirOpen::writeFile(fs::FS &fs, const char *path, const char *message)
 {
@@ -354,82 +359,123 @@ void mimirOpen::appendFile(fs::FS &fs, const char *path, const char *message)
     file.close();
 }
 
-void mimirOpen::logData(String data)
+void mimirOpen::logData(envData data, systems status)
 {
-
-    Serial.print("Save data: ");
-    Serial.println(data);
-
+    Serial.print("Saving data");
     File file = SD.open(filename);
     if (!file)
     {
         Serial.println("File doens't exist");
         Serial.println("Creating file...");
-        writeFile(SD, filename, "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
+        writeFile(SD, filename, header().c_str());
     }
     file.close();
-    appendFile(SD, filename, data.c_str());
+    appendFile(SD, filename, stringData(data, status).c_str());
 }
 
-String mimirOpen::packageJSON()
+String mimirOpen::packageJSON(envData _data, systems _status, auth _user)
 {
     DynamicJsonDocument package(1024);
     String output;
 
-    JsonObject userInfo = package.createNestedObject("userInfo");
-    userInfo["userName"] = _USER;
-    userInfo["userId"] = _USER_ID;
-    userInfo["deviceId"] = _DEVICE_ID;
-    userInfo["ipAddress"] = _IP_ADDRESS;
-    userInfo["macAddress"] = WiFi.macAddress();
-    userInfo["version"] = MIMIR_VERSION;
+    JsonObject auth = package.createNestedObject("auth");
+    auth["userId"] = _user.userId;
+    auth["deviceId"] = _user.deviceId;
+    auth["macAddress"] = _user.macAddress;
 
     JsonObject status = package.createNestedObject("status");
-    status["Battery_Percent"] = batteryPercent;
-    status["WiFi_Signal"] = wifi_signal;
     status["Date"] = DateStr;
     status["Time"] = TimeStr;
+    status["battery"] = _status.battery;
+    status["batteryPercent"] = _status.batteryPercent;
+    status["wifi"] = _status.wifi;
+    status["sd"] = _status.sd;
+    status["server"] = _status.server;
+    status["BME680"] = _status.BME680;
+    status["COMPAS"] = _status.COMPAS;
+    status["SHT31"] = _status.SHT31;
+    status["VEML6030"] = _status.VEML6030;
 
     JsonObject data = package.createNestedObject("data");
 
-    data["Temperature(SHT31_L)"] = temp1;
-    data["Temperature(SHT31_H)"] = temp2;
-    data["Temperature(bmp280)"] = temp3;
-    data["Humidity(SHT31_L)"] = hum1;
-    data["Humidity(SHT31_H)"] = hum2;
-    data["Pressure(BMP280)"] = pres;
-    data["Altitude(BMP280)"] = pres;
-    data["Luminance(VEML6030)"] = lux;
-    data["UVA(VEML6075)"] = uvA;
-    data["UVB(VEML6075)"] = uvB;
-    data["UVIndex(VEML6075)"] = uvIndex;
-    data["eCO2(CCS811)"] = eCO2;
-    data["VOC(CCS811)"] = tVOC;
-    data["Bearing(Compass)"] = bearing;
+    data["temperature"] = _data.temperature;
+    data["humidity"] = _data.humidity;
+    data["pressure"] = _data.pressure;
+    data["altitude"] = _data.altitude;
+    data["luminance"] = _data.luminance;
+    data["iaq"] = _data.iaq;
+    data["eVOC"] = _data.eVOC;
+    data["eCO2"] = _data.eCO2;
+    data["bearing"] = _data.bearing;
 
     serializeJsonPretty(package, output);
     return output;
 }
 
-String mimirOpen::stringData()
+String mimirOpen::stringData(envData data, systems status)
 {
-    return String(DateStr) + "," +
-           String(TimeStr) + "," +
-           String(batteryPercent) + "," +
-           String(temp1) + "," +
-           String(temp2) + "," +
-           String(temp3) + "," +
-           String(alt) + "," +
-           String(hum1) + "," +
-           String(hum2) + "," +
-           String(pres) + "," +
-           String(lux) + "," +
-           String(uvA) + "," +
-           String(uvB) + "," +
-           String(uvIndex) + "," +
-           String(eCO2) + "," +
-           String(tVOC) + "," +
-           String(bearing) + "\r\n";
+    return DateStr + "," +
+           TimeStr + "," +
+           status.battery +
+           "," +
+           status.batteryPercent +
+           "," +
+           status.wifi +
+           "," +
+           status.sd +
+           "," +
+           status.server +
+           "," +
+           status.BME680 +
+           "," +
+           status.COMPAS +
+           "," +
+           status.SHT31 +
+           "," +
+           status.VEML6030 +
+           "," +
+           data.temperature +
+           "," +
+           data.humidity +
+           "," +
+           data.pressure +
+           "," +
+           data.altitude +
+           "," +
+           data.luminance +
+           "," +
+           data.iaq +
+           "," +
+           data.eVOC +
+           "," +
+           data.eCO2 +
+           "," +
+           data.bearing + "\r\n";
+}
+
+String mimirOpen::header()
+{
+    String output = "date," +
+                    "time," +
+                    "battery," +
+                    "batteryPercent," +
+                    "wifi," +
+                    "sd," +
+                    "server," +
+                    "BME680," +
+                    "COMPAS," +
+                    "SHT31," +
+                    "VEML6030," +
+                    "temperature," +
+                    "humidity," +
+                    "pressure," +
+                    "altitude," +
+                    "luminance," +
+                    "iaq," +
+                    "eVOC," +
+                    "eCO2," +
+                    "bearing" + "\r\n";
+    return output;
 }
 
 void mimirOpen::WiFiCallback(WiFiManager *myWiFiManager)

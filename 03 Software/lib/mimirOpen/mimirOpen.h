@@ -15,24 +15,55 @@
 #define addrbmp280 0x76
 #define addrCompass 0X0C
 
-struct config {
+enum STATUS
+{
+    ERROR_LOADING = -3,
+    ERROR_R,
+    ERROR_W,
+    UNMOUNTED,
+    OK
+};
+
+struct config
+{
     String userName;
     String password;
     String deviceName;
-    
+    String userId;
+    String deviceId;
 };
 
-struct envData {
-float temp;
-float humidity;
-float pressure;
-float altitude;
-float luminance;
-float iaq;
-float eVOC;
-float eCO2;
+struct auth
+{
+    String userId;
+    String deviceId;
+    String macAddress;
+};
 
-int bearing;
+struct systems
+{
+    STATUS battery;
+    int batteryPercent;
+    STATUS wifi;
+    STATUS sd;
+    STATUS server;
+    STATUS BME680;
+    STATUS COMPAS;
+    STATUS SHT31;
+    STATUS VEML6030;
+};
+
+struct envData
+{
+    float temperature;
+    float humidity;
+    float pressure;
+    float altitude;
+    float luminance;
+    float iaq;
+    float eVOC;
+    float eCO2;
+    int bearing;
 };
 
 class mimirOpen
@@ -45,18 +76,18 @@ public:
     void initPixels(int brightness = 64);
     void initSensors();
     void initMicroSD();
-    void initWIFI();
+    void initWIFI(config config);
     void initSPIFFS();
 
     //Main
-    void saveToSPIFFS();
-    void sendData(String address);
-    void readSensors();
-    void printSensors();
-    void logData(String data);
+    void saveToSPIFFS(config data);
+    void sendData(String address, envData data, systems status, auth user);
+    envData readSensors();
+    void printSensors(envData data);
+    void logData(envData data, systems status);
 
     //Helping
-    String stringData();
+    String stringData(envData data, systems status);
     void WiFi_ON();
     void WiFi_OFF();
     void SLEEP();
@@ -105,7 +136,9 @@ private:
     double avgTemp;
     int avgHum;
 
-    String packageJSON();
+    float averageValue(float values[]);
+    String packageJSON(envData data, systems status, auth user);
+    String header();
     void createFileName(char date[]);
     bool SetupTime();
     bool UpdateLocalTime();
