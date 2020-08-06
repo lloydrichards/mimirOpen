@@ -14,18 +14,41 @@
 #include "mimirOpen.h"
 
 mimirOpen mimir(115200);
+package sendData;
+
+RTC_DATA_ATTR int count;
 
 void setup()
 {
-config config = mimir.initSPIFFS(); 
- mimir.initMicroSD();
- mimir.initSensors();
 
- envData data = mimir.readSensors();
- mimir.printSensors(data);
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    config config = mimir.initSPIFFS();
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        mimir.initWIFI(config);
+    }
+    mimir.initMicroSD("/testing.txt");
+    mimir.initSensors();
 
- mimir.logData(data);
- Serial.println("**FINISHED**");
+    envData data = mimir.readSensors();
+    mimir.printSensors(data);
+    mimir.logData(data, "/testing.txt");
+
+    sendData.auth.deviceId = config.deviceId;
+    sendData.auth.userId = config.userId;
+    sendData.auth.macAddress = WiFi.macAddress();
+    sendData.status = mimir.getStatus();
+    sendData.data = data;
+
+    //Everything that happens with the server happens in here
+    mimir.WiFi_ON();
+
+    mimir.WiFi_OFF();
+
+    mimir.saveToSPIFFS(config);
+    count++;
+    Serial.print("Boot Count: ");
+    Serial.println(count);
+    mimir.SLEEP(15);
 }
 
 

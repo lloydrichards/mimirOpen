@@ -18,26 +18,18 @@ SPIClass spiSD(HSPI);
 #include <NeoPixelBrightnessBus.h>
 #include "Adafruit_SHT31.h"                         //https://github.com/adafruit/Adafruit_SHT31
 #include "SparkFun_VEML6030_Ambient_Light_Sensor.h" //https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library
-#include "SparkFun_VEML6075_Arduino_Library.h"
-#include <Adafruit_BMP280.h>
-#include "ccs811.h" //https://github.com/maarten-pennings/CCS811
+#include "bsec.h"
 #include <HSCDTD008A.h>
 
 //Define Sensors
-Adafruit_SHT31 sht31_L = Adafruit_SHT31();
-Adafruit_SHT31 sht31_H = Adafruit_SHT31();
-SparkFun_Ambient_Light veml6030(addrVEML6030);
-VEML6075 veml6075;
-CCS811 ccs811(36);
-Adafruit_BMP280 bmp280;
-HSCDTD008A compass(Wire, addrCompass);
+Adafruit_SHT31 SHT31 = Adafruit_SHT31();
+SparkFun_Ambient_Light VEML6030(addrVEML6030);
+Bsec BME680;
+HSCDTD008A COMPAS(Wire, addrCompas);
 
 //VEML6030 settings
 float gain = .125;
 int integTime = 100;
-
-//bmp280 settings
-#define SEALEVELPRESSURE_HPA (1013.25)
 
 //Define Pixels
 #define PIXEL_PIN 19
@@ -70,37 +62,49 @@ void mimirOpen::initPixels(int brightness)
 
 void mimirOpen::initSensors()
 {
-    sht31_L.begin(addrSHT31D_L) ? Serial.println("SHT31_L Success!") : Serial.println("SHT31_L Failed!");
-    sht31_H.begin(addrSHT31D_H) ? Serial.println("SHT31_H Success!") : Serial.println("SHT31_H Failed!");
-    if (veml6030.begin())
+    if (SHT31.begin(addrSHT31D)) {
+        Serial.println("SHT31 Success!");
+        STATUS_SHT31 = OKAY;
+    }
+    else {
+        Serial.println("SHT31 Failed!");
+        STATUS_SHT31 = ERROR_L;
+    }
+    if (VEML6030.begin())
     {
-        veml6030.setGain(gain);
-        veml6030.setIntegTime(integTime);
-        veml6030.setPowSavMode(2);
-        veml6030.enablePowSave();
+        VEML6030.setGain(gain);
+        VEML6030.setIntegTime(integTime);
+        VEML6030.setPowSavMode(2);
+        VEML6030.enablePowSave();
         Serial.println("VEML6030 Success!");
+        STATUS_VEML6030 = OKAY;
     }
-    else
+    else {
         Serial.println("VEML6030 Failed!");
-    veml6075.begin() ? Serial.println("VEML6075 Success!") : Serial.println("VEML6075 Failed!");
-    if (ccs811.begin())
-    {
-        if (ccs811.start(CCS811_MODE_1SEC))
-            Serial.println("CCS811 Success!");
+        STATUS_VEML6030 = ERROR_L;
     }
-    else
-        Serial.println("CCS811 Failed!");
-    if (compass.begin())
+    BME680.begin(addrBME680, Wire);
+    if (BME680.status == BSEC_OK) {
+        STATUS_BME680 = OKAY;
+        Serial.println("BME680 Success!");
+    }
+    else {
+        STATUS_BME680 = ERROR_L;
+        Serial.println("BME680 Failed!");
+    }
+    if (COMPAS.begin())
     {
-        compass.calibrate();
+        COMPAS.calibrate();
         Serial.println("Compass Success!");
+        STATUS_COMPAS = OKAY;
     }
-    else
+    else {
         Serial.println("Compass Failed!");
-    bmp280.begin(addrbmp280) ? Serial.println("BMP280 Success!") : Serial.println("BMP280 Failed!");
+        STATUS_COMPAS = ERROR_L;
+    }
 }
 
-void mimirOpen::initMicroSD()
+void mimirOpen::initMicroSD(String filename)
 {
     spiSD.begin(14, 2, 15, 13);
     Serial.println("Initializing SD card...");
@@ -111,12 +115,12 @@ void mimirOpen::initMicroSD()
     }
     // If the data.txt file doesn't exist
     // Create a file on the SD card and write the data labels
-    File file = SD.open(filename);
+    File file = SD.open(filename.c_str());
     if (!file)
     {
         Serial.println("File doens't exist");
         Serial.println("Creating file...");
-        writeFile(SD, filename, "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
+        writeFile(SD, filename.c_str(), "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
     }
     else
     {
@@ -210,43 +214,41 @@ config mimirOpen::initSPIFFS()
 envData mimirOpen::readSensors()
 {
     envData data;
-    uint16_t eco2, etvoc, errstat, raw;
-    float tempArr[] = {sht31_L.readTemperature(), sht31_H.readTemperature(), bmp280.readTemperature()};
-    data.temperature = averageValue(tempArr);
+    bsec_virtual_sensor_t BME680Readings[10] ={
+        BSEC_OUTPUT_RAW_TEMPERATURE,
+        BSEC_OUTPUT_RAW_PRESSURE,
+        BSEC_OUTPUT_RAW_HUMIDITY,
+        BSEC_OUTPUT_RAW_GAS,
+        BSEC_OUTPUT_IAQ,
+        BSEC_OUTPUT_STATIC_IAQ,
+        BSEC_OUTPUT_CO2_EQUIVALENT,
+        BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+    };
+    BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_LP);
+    BME680.run()?
+        STATUS_BME680 = OKAY
+        :STATUS_BME680 = ERROR_R;
 
-    hum1 = (float)sht31_L.readHumidity();
-    hum2 = (float)sht31_H.readHumidity();
+    float avgTemp = (SHT31.readTemperature()+ BME680.temperature)/2;
+    float avgHumi = (SHT31.readHumidity()+ BME680.humidity)/2;
+    data.temperature = avgTemp;
+    data.humidity = avgHumi;
+    data.pressure = BME680.pressure;
+    data.altitude = calcAltitude(BME680.pressure, avgTemp);
+    data.luminance = (float)VEML6030.readLight();
+    data.iaq = BME680.iaq;
+    data.eCO2 = BME680.co2Equivalent;
+    data.eVOC = BME680.breathVocEquivalent;
 
-    avgTemp = (temp1 + temp2 + temp3) / 3;
-    avgHum = (hum1 + hum2) / 2;
-
-    pres = (float)bmp280.readPressure() / 100;
-    alt = (float)bmp280.readAltitude(SEALEVELPRESSURE_HPA);
-
-    lux = (float)veml6030.readLight();
-    uvA = (float)veml6075.uva();
-    uvB = (float)veml6075.uvb();
-    uvIndex = (float)veml6075.index();
-
-    float fract = modf(avgTemp, &avgTemp);
-    uint16_t tempHIGH = (((uint16_t)avgTemp + 25) << 9);
-    uint16_t tempLOW = ((uint16_t)(fract / 0.001953125) & 0x1FF);
-
-    uint16_t tempCONVERT = (tempHIGH | tempLOW);
-    uint16_t humCONVERT = avgHum << 1 | 0x00;
-
-    ccs811.set_envdata(tempCONVERT, humCONVERT);
-    ccs811.read(&eco2, &etvoc, &errstat, &raw);
-    eCO2 = (float)eco2;
-    tVOC = (float)etvoc;
-    ccs811ERROR = errstat;
-
-    if (compass.measure())
+    if (COMPAS.measure())
     {
-        compassX = compass.x();
-        compassY = compass.y();
-        compassZ = compass.z();
-        bearing = ((atan2(compassY, compassX)) * 180) / PI; //values will range from +180 to -180 degrees
+        data.bearing = ((atan2(COMPAS.y(), COMPAS.x())) * 180) / PI;
+        STATUS_COMPAS = OKAY;
+    }
+    else {
+        STATUS_COMPAS = ERROR_R;
     }
     return data;
 }
@@ -293,11 +295,11 @@ void mimirOpen::printSensors(envData data)
     Serial.println(data.bearing);
 }
 
-void mimirOpen::sendData(String address, envData data, systems status, auth user)
+void mimirOpen::sendData(String address, package data)
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
-        String package = packageJSON(data, status, user);
+        String package = packageJSON(data);
         HTTPClient http;
         http.begin(address);
         http.addHeader("Content-Type", "application/json");
@@ -319,6 +321,31 @@ void mimirOpen::sendData(String address, envData data, systems status, auth user
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+
+int mimirOpen::getBatteryPercent() {
+    int percent = 0;
+    return percent;
+};
+
+systems mimirOpen::getStatus() {
+    systems current;
+    current.battery = STATUS_BATTERY;
+    current.batteryPercent = getBatteryPercent();
+    current.sd = STATUS_SD;
+    current.server = STATUS_SERVER;
+    current.wifi = STATUS_WIFI;
+    current.BME680 = STATUS_BME680;
+    current.COMPAS = STATUS_COMPAS;
+    current.SHT31 = STATUS_SHT31;
+    current.VEML6030 = STATUS_VEML6030;
+    return current;
+};
+
+float mimirOpen::calcAltitude(float pressure, float temperature) {
+    float SEALEVELPRESSURE_HPA = 1013.25;
+    float altitude = 44330 * (1.0 - pow((pressure/100) / SEALEVELPRESSURE_HPA, 0.1903));
+    return altitude;
+};
 
 float mimirOpen::averageValue(float values[])
 {
@@ -366,54 +393,64 @@ void mimirOpen::appendFile(fs::FS &fs, const char *path, const char *message)
     file.close();
 }
 
-void mimirOpen::logData(envData data, systems status)
+void mimirOpen::logData(envData data, String filename)
 {
+    systems status;
+    status.battery = STATUS_BATTERY;
+    status.wifi = STATUS_WIFI;
+    status.sd = STATUS_SD;
+    status.server = STATUS_SERVER;
+    status.BME680 = STATUS_BME680;
+    status.COMPAS = STATUS_COMPAS;
+    status.SHT31 = STATUS_SHT31;
+    status.VEML6030 = STATUS_VEML6030;
+
     Serial.print("Saving data");
     File file = SD.open(filename);
     if (!file)
     {
         Serial.println("File doens't exist");
         Serial.println("Creating file...");
-        writeFile(SD, filename, header().c_str());
+        writeFile(SD, filename.c_str(), header().c_str());
     }
     file.close();
-    appendFile(SD, filename, stringData(data, status).c_str());
+    appendFile(SD, filename.c_str(), stringData(data, status).c_str());
 }
 
-String mimirOpen::packageJSON(envData _data, systems _status, auth _user)
+String mimirOpen::packageJSON(package _data)
 {
     DynamicJsonDocument package(1024);
     String output;
 
     JsonObject auth = package.createNestedObject("auth");
-    auth["userId"] = _user.userId;
-    auth["deviceId"] = _user.deviceId;
-    auth["macAddress"] = _user.macAddress;
+    auth["userId"] = _data.auth.userId;
+    auth["deviceId"] = _data.auth.deviceId;
+    auth["macAddress"] = _data.auth.macAddress;
 
     JsonObject status = package.createNestedObject("status");
     status["Date"] = DateStr;
     status["Time"] = TimeStr;
-    status["battery"] = _status.battery;
-    status["batteryPercent"] = _status.batteryPercent;
-    status["wifi"] = _status.wifi;
-    status["sd"] = _status.sd;
-    status["server"] = _status.server;
-    status["BME680"] = _status.BME680;
-    status["COMPAS"] = _status.COMPAS;
-    status["SHT31"] = _status.SHT31;
-    status["VEML6030"] = _status.VEML6030;
+    status["battery"] = _data.status.battery;
+    status["batteryPercent"] = _data.status.batteryPercent;
+    status["wifi"] = _data.status.wifi;
+    status["sd"] = _data.status.sd;
+    status["server"] = _data.status.server;
+    status["BME680"] = _data.status.BME680;
+    status["COMPAS"] = _data.status.COMPAS;
+    status["SHT31"] = _data.status.SHT31;
+    status["VEML6030"] = _data.status.VEML6030;
 
     JsonObject data = package.createNestedObject("data");
 
-    data["temperature"] = _data.temperature;
-    data["humidity"] = _data.humidity;
-    data["pressure"] = _data.pressure;
-    data["altitude"] = _data.altitude;
-    data["luminance"] = _data.luminance;
-    data["iaq"] = _data.iaq;
-    data["eVOC"] = _data.eVOC;
-    data["eCO2"] = _data.eCO2;
-    data["bearing"] = _data.bearing;
+    data["temperature"] = _data.data.temperature;
+    data["humidity"] = _data.data.humidity;
+    data["pressure"] = _data.data.pressure;
+    data["altitude"] = _data.data.altitude;
+    data["luminance"] = _data.data.luminance;
+    data["iaq"] = _data.data.iaq;
+    data["eVOC"] = _data.data.eVOC;
+    data["eCO2"] = _data.data.eCO2;
+    data["bearing"] = _data.data.bearing;
 
     serializeJsonPretty(package, output);
     return output;
@@ -422,42 +459,42 @@ String mimirOpen::packageJSON(envData _data, systems _status, auth _user)
 String mimirOpen::stringData(envData data, systems status)
 {
     return DateStr + "," +
-           TimeStr + "," +
-           status.battery +
-           "," +
-           status.batteryPercent +
-           "," +
-           status.wifi +
-           "," +
-           status.sd +
-           "," +
-           status.server +
-           "," +
-           status.BME680 +
-           "," +
-           status.COMPAS +
-           "," +
-           status.SHT31 +
-           "," +
-           status.VEML6030 +
-           "," +
-           data.temperature +
-           "," +
-           data.humidity +
-           "," +
-           data.pressure +
-           "," +
-           data.altitude +
-           "," +
-           data.luminance +
-           "," +
-           data.iaq +
-           "," +
-           data.eVOC +
-           "," +
-           data.eCO2 +
-           "," +
-           data.bearing + "\r\n";
+        TimeStr + "," +
+        status.battery +
+        "," +
+        status.batteryPercent +
+        "," +
+        status.wifi +
+        "," +
+        status.sd +
+        "," +
+        status.server +
+        "," +
+        status.BME680 +
+        "," +
+        status.COMPAS +
+        "," +
+        status.SHT31 +
+        "," +
+        status.VEML6030 +
+        "," +
+        data.temperature +
+        "," +
+        data.humidity +
+        "," +
+        data.pressure +
+        "," +
+        data.altitude +
+        "," +
+        data.luminance +
+        "," +
+        data.iaq +
+        "," +
+        data.eVOC +
+        "," +
+        data.eCO2 +
+        "," +
+        data.bearing + "\r\n";
 }
 
 String mimirOpen::header()
@@ -491,18 +528,20 @@ void mimirOpen::WiFi_OFF()
     WiFi.mode(WIFI_OFF);
 };
 
-void mimirOpen::SLEEP()
+void mimirOpen::SLEEP(long interval)
 {
     //CONFIG Sleep Pin
-    Serial.println("Config Sleep Pin");
-    gpio_pullup_en(GPIO_NUM_39);    // use pullup on GPIO
-    gpio_pulldown_dis(GPIO_NUM_39); // not use pulldown on GPIO
+    //Serial.println("Config Sleep Pin");
+    // gpio_pullup_en(GPIO_NUM_32);    // use pullup on GPIO
+    // gpio_pullup_en(GPIO_NUM_33);    // use pullup on GPIO
+    // gpio_pulldown_dis(GPIO_NUM_32); // not use pulldown on GPIO
+    // gpio_pulldown_dis(GPIO_NUM_33); // not use pulldown on GPIO
 
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0);
+    // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 
     //CONFIG Sleep Timer
     Serial.println("Config Sleep Timer");                                                           // Wake if GPIO is low
-    long SleepTimer = (SleepDuration * 60 - ((CurrentMin % SleepDuration) * 60 + CurrentSec)) + 30; //Some ESP32 are too fast to maintain accurate time
+    long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)) + 30; //Some ESP32 are too fast to maintain accurate time
     esp_sleep_enable_timer_wakeup(SleepTimer * 1000000LL);
 
     Serial.println("Entering " + String(SleepTimer) + "-secs of sleep time");
@@ -542,24 +581,9 @@ bool mimirOpen::UpdateLocalTime()
     //Serial.println(&timeinfo, "%H:%M:%S");                               // Displays: 14:05:49
     strftime(day_output, 30, "%F", &timeinfo);               // Displays: Sat 24-Jun-17
     strftime(output, sizeof(output), "%H:%M:%S", &timeinfo); // Creates: '14:05:49'
-    createFileName(day_output);
     DateStr = day_output;
     TimeStr = output;
     return true;
-}
-
-void mimirOpen::createFileName(char date[])
-{
-    filename[1] = date[0];
-    filename[2] = date[1];
-    filename[3] = date[2];
-    filename[4] = date[3];
-    filename[5] = date[4];
-    filename[6] = date[5];
-    filename[7] = date[6];
-    filename[8] = date[7];
-    filename[9] = date[8];
-    filename[10] = date[9];
 }
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////

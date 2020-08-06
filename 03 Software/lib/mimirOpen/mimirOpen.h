@@ -7,13 +7,11 @@
 #include "time.h"
 #include <WiFiManager.h>
 
-#define addrSHT31D_L 0x44
-#define addrSHT31D_H 0x45
+#define addrSHT31D 0x45
 #define addrVEML6030 0x48
-#define addrVEML6075 0x10
 #define addrCCS811 0x5A
-#define addrbmp280 0x76
-#define addrCompass 0X0C
+#define addrBME680 0x76
+#define addrCompas 0X0C
 
 enum SYS_STATUS
 {
@@ -33,7 +31,7 @@ struct config
     String deviceId;
 };
 
-struct auth
+struct authType
 {
     String userId;
     String deviceId;
@@ -66,6 +64,12 @@ struct envData
     int bearing;
 };
 
+struct package {
+    authType auth;
+    systems status;
+    envData data;
+};
+
 class mimirOpen
 {
 
@@ -75,22 +79,23 @@ public:
     //Init
     void initPixels(int brightness = 64);
     void initSensors();
-    void initMicroSD();
+    void initMicroSD(String filename ="/0000-00-00.txt");
     void initWIFI(config config);
     config initSPIFFS();
 
     //Main
     void saveToSPIFFS(config data);
-    void sendData(String address, envData data, systems sys, auth user);
+    void sendData(String address, package data);
     envData readSensors();
     void printSensors(envData data);
-    void logData(envData data, systems sys);
+    void logData(envData data, String filename = "/0000-00-00.txt");
 
     //Helping
     String stringData(envData data, systems sys);
+    systems getStatus();
     void WiFi_ON();
     void WiFi_OFF();
-    void SLEEP();
+    void SLEEP(long interval = 15);
 
     //Testing
     void testHTTPRequest(String address);
@@ -103,43 +108,30 @@ private:
     char _USER_ID[40];
     char _DEVICE_ID[40];
     char MIMIR_VERSION[10] = "P2005.2";
-    char filename[16] = "/0000-00-00.txt";
 
     String TimeStr, DateStr, ErrorMessage; // strings to hold time and date
     const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 
     int StartTime = 0, CurrentHour = 0, CurrentMin = 0, CurrentSec = 0;
-    long SleepDuration = 15; //minutes of the hour. eg 15 would wake up at XX:00, XX:15, XX:30 and XX:45
 
     int wifi_signal;
     int batteryPercent;
 
-    float temp1;
-    float temp2;
-    float temp3;
-    float alt;
-    float hum1;
-    float hum2;
-    float pres;
-    float lux;
-    float uvA;
-    float uvB;
-    float uvIndex;
-    float eCO2;
-    float tVOC;
-    uint16_t ccs811ERROR;
-    int16_t compassX;
-    int16_t compassY;
-    int16_t compassZ;
-    int bearing;
+    SYS_STATUS STATUS_BATTERY =UNMOUNTED;
+    SYS_STATUS STATUS_WIFI =UNMOUNTED;
+    SYS_STATUS STATUS_SD=UNMOUNTED;
+    SYS_STATUS STATUS_SERVER=UNMOUNTED;
+    SYS_STATUS STATUS_BME680=UNMOUNTED;
+    SYS_STATUS STATUS_COMPAS=UNMOUNTED;
+    SYS_STATUS STATUS_SHT31=UNMOUNTED;
+    SYS_STATUS STATUS_VEML6030=UNMOUNTED;
 
-    double avgTemp;
-    int avgHum;
-
+    //Helper
+    int getBatteryPercent();
+    float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
-    String packageJSON(envData data, systems SYS_STATUS, auth user);
+    String packageJSON(package data);
     String header();
-    void createFileName(char date[]);
     bool SetupTime();
     bool UpdateLocalTime();
     static void WiFiCallback(WiFiManager *myWiFiManager);
