@@ -41,7 +41,7 @@ void setup()
 
     //Everything that happens with the server happens in here
     mimir.WiFi_ON();
-
+    mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/sensorData/add", sendData);
     mimir.WiFi_OFF();
 
     mimir.saveToSPIFFS(config);

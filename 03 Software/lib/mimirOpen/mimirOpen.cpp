@@ -162,7 +162,7 @@ void mimirOpen::initWIFI(config _config)
 config mimirOpen::initSPIFFS()
 {
     config newConfig;
-    if (SPIFFS.begin())
+    if (SPIFFS.begin(true))
     {
         Serial.println("mounted file system");
         if (SPIFFS.exists("/config.json"))
