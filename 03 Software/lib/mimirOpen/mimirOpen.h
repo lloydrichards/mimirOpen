@@ -24,7 +24,7 @@ enum SYS_STATUS
 
 struct config
 {
-    String userName;
+    String email;
     String password;
     String deviceName;
     String userId;
@@ -64,11 +64,17 @@ struct envData
     int bearing;
 };
 
-struct package {
+struct DataPackage {
     authType auth;
     systems status;
     envData data;
 };
+
+struct AuthPackage {
+    String email;
+    String deviceId;
+    String macAddress
+}
 
 class mimirOpen
 {
@@ -85,7 +91,7 @@ public:
 
     //Main
     void saveToSPIFFS(config data);
-    void sendData(String address, package data);
+    void sendData(String address, DataPackage data);
     envData readSensors();
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
@@ -130,7 +136,7 @@ private:
     int getBatteryPercent();
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
-    String packageJSON(package data);
+    String packageJSON(DataPackage data);
     String header();
     bool SetupTime();
     bool UpdateLocalTime();

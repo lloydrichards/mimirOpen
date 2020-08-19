@@ -14,7 +14,7 @@
 #include "mimirOpen.h"
 
 mimirOpen mimir(115200);
-package sendData;
+DataPackage sendData;
 
 RTC_DATA_ATTR int count;
 

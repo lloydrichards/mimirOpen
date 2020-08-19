@@ -295,7 +295,7 @@ void mimirOpen::printSensors(envData data)
     Serial.println(data.bearing);
 }
 
-void mimirOpen::sendData(String address, package data)
+void mimirOpen::sendData(String address, DataPackage data)
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
@@ -417,7 +417,7 @@ void mimirOpen::logData(envData data, String filename)
     appendFile(SD, filename.c_str(), stringData(data, status).c_str());
 }
 
-String mimirOpen::packageJSON(package _data)
+String mimirOpen::packageJSON(DataPackage _data)
 {
     DynamicJsonDocument package(1024);
     String output;
