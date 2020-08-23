@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include "time.h"
+#include <EEPROM.h>
 
 SPIClass spiSD(HSPI);
 
@@ -26,6 +27,13 @@ Adafruit_SHT31 SHT31 = Adafruit_SHT31();
 SparkFun_Ambient_Light VEML6030(addrVEML6030);
 Bsec BME680;
 HSCDTD008A COMPAS(Wire, addrCompas);
+
+//BME680 State
+const uint8_t bsec_config_iaq[] = {
+#include "config/generic_33v_300s_4d/bsec_iaq.txt"
+};
+uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
+uint16_t stateUpdateCounter = 0;
 
 //VEML6030 settings
 float gain = .125;
@@ -62,11 +70,13 @@ void mimirOpen::initPixels(int brightness)
 
 void mimirOpen::initSensors()
 {
-    if (SHT31.begin(addrSHT31D)) {
+    if (SHT31.begin(addrSHT31D))
+    {
         Serial.println("SHT31 Success!");
         STATUS_SHT31 = OKAY;
     }
-    else {
+    else
+    {
         Serial.println("SHT31 Failed!");
         STATUS_SHT31 = ERROR_L;
     }
@@ -79,16 +89,21 @@ void mimirOpen::initSensors()
         Serial.println("VEML6030 Success!");
         STATUS_VEML6030 = OKAY;
     }
-    else {
+    else
+    {
         Serial.println("VEML6030 Failed!");
         STATUS_VEML6030 = ERROR_L;
     }
     BME680.begin(addrBME680, Wire);
-    if (BME680.status == BSEC_OK) {
+    if (BME680.status == BSEC_OK)
+    {
+        BME680.setConfig(bsec_config_iaq);
+        loadBSECState();
         STATUS_BME680 = OKAY;
         Serial.println("BME680 Success!");
     }
-    else {
+    else
+    {
         STATUS_BME680 = ERROR_L;
         Serial.println("BME680 Failed!");
     }
@@ -98,7 +113,8 @@ void mimirOpen::initSensors()
         Serial.println("Compass Success!");
         STATUS_COMPAS = OKAY;
     }
-    else {
+    else
+    {
         Serial.println("Compass Failed!");
         STATUS_COMPAS = ERROR_L;
     }
@@ -130,16 +146,16 @@ void mimirOpen::initMicroSD(String filename)
 }
 void mimirOpen::initWIFI(config _config)
 {
-    config newConfig;
+    config newConfig = _config;
 
-    WiFiManagerParameter custom_USER_NAME("User Name", "User Name", _config.userName.c_str(), 40);
-    WiFiManagerParameter custom_PASSWORD("Password", "Password", "", 40);
+    WiFiManagerParameter custom_EMAIL("Email", "Email", _config.email.c_str(), 40);
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", _config.serialNumber.c_str(), 40);
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", _config.deviceName.c_str(), 40);
 
     WiFiManager wifiManager;
 
-    wifiManager.addParameter(&custom_USER_NAME);
-    wifiManager.addParameter(&custom_PASSWORD);
+    wifiManager.addParameter(&custom_EMAIL);
+    wifiManager.addParameter(&custom_SERIAL_NUMBER);
     wifiManager.addParameter(&custom_DEVICE_NAME);
 
     wifiManager.setAPCallback(WiFiCallback);
@@ -151,8 +167,47 @@ void mimirOpen::initWIFI(config _config)
         SetupTime();
     }
     //Update Device Info with Params
-    newConfig.userName = custom_USER_NAME.getValue();
-    newConfig.password = custom_PASSWORD.getValue();
+    newConfig.email = custom_EMAIL.getValue();
+    newConfig.serialNumber = custom_SERIAL_NUMBER.getValue();
+    newConfig.deviceName = custom_DEVICE_NAME.getValue();
+    newConfig.deviceId = _config.deviceId;
+    newConfig.userId = _config.userId;
+
+    saveToSPIFFS(newConfig);
+    WiFi_OFF();
+}
+
+void mimirOpen::forceWIFI(config _config)
+{
+    config newConfig = _config;
+
+    WiFiManagerParameter custom_EMAIL("Email", "Email", _config.email.c_str(), 40);
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", _config.serialNumber.c_str(), 40);
+    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", _config.deviceName.c_str(), 40);
+
+    WiFiManager wifiManager;
+
+    wifiManager.addParameter(&custom_EMAIL);
+    wifiManager.addParameter(&custom_SERIAL_NUMBER);
+    wifiManager.addParameter(&custom_DEVICE_NAME);
+
+    wifiManager.setAPCallback(WiFiCallback);
+    if (!wifiManager.startConfigPortal("mimirOpen Forced"))
+    {
+        Serial.println("failed to connect and hit timeout");
+        delay(3000);
+        //reset and try again, or maybe put it to deep sleep
+        ESP.restart();
+        delay(5000);
+    }
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        wifi_signal = WiFi.RSSI();
+        SetupTime();
+    }
+    //Update Device Info with Params
+    newConfig.email = custom_EMAIL.getValue();
+    newConfig.serialNumber = custom_SERIAL_NUMBER.getValue();
     newConfig.deviceName = custom_DEVICE_NAME.getValue();
 
     saveToSPIFFS(newConfig);
@@ -186,10 +241,10 @@ config mimirOpen::initSPIFFS()
                     return newConfig;
                 }
                 Serial.println("\nparsed json");
-                serializeJson(configJson, Serial);
+                serializeJsonPretty(configJson, Serial);
 
-                newConfig.userName = configJson["userName"].as<String>();
-                newConfig.password = configJson["password"].as<String>();
+                newConfig.email = configJson["email"].as<String>();
+                newConfig.serialNumber = configJson["serialNumber"].as<String>();
                 newConfig.deviceName = configJson["deviceName"].as<String>();
                 newConfig.userId = configJson["userId"].as<String>();
                 newConfig.deviceId = configJson["deviceId"].as<String>();
@@ -214,7 +269,7 @@ config mimirOpen::initSPIFFS()
 envData mimirOpen::readSensors()
 {
     envData data;
-    bsec_virtual_sensor_t BME680Readings[10] ={
+    bsec_virtual_sensor_t BME680Readings[10] = {
         BSEC_OUTPUT_RAW_TEMPERATURE,
         BSEC_OUTPUT_RAW_PRESSURE,
         BSEC_OUTPUT_RAW_HUMIDITY,
@@ -227,12 +282,11 @@ envData mimirOpen::readSensors()
         BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
     };
     BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_LP);
-    BME680.run()?
-        STATUS_BME680 = OKAY
-        :STATUS_BME680 = ERROR_R;
+    BME680.run() ? STATUS_BME680 = OKAY
+                 : STATUS_BME680 = ERROR_R;
 
-    float avgTemp = (SHT31.readTemperature()+ BME680.temperature)/2;
-    float avgHumi = (SHT31.readHumidity()+ BME680.humidity)/2;
+    float avgTemp = (SHT31.readTemperature() + BME680.temperature) / 2;
+    float avgHumi = (SHT31.readHumidity() + BME680.humidity) / 2;
     data.temperature = avgTemp;
     data.humidity = avgHumi;
     data.pressure = BME680.pressure;
@@ -242,12 +296,14 @@ envData mimirOpen::readSensors()
     data.eCO2 = BME680.co2Equivalent;
     data.eVOC = BME680.breathVocEquivalent;
 
+    updateBSECState();
     if (COMPAS.measure())
     {
         data.bearing = ((atan2(COMPAS.y(), COMPAS.x())) * 180) / PI;
         STATUS_COMPAS = OKAY;
     }
-    else {
+    else
+    {
         STATUS_COMPAS = ERROR_R;
     }
     return data;
@@ -255,21 +311,23 @@ envData mimirOpen::readSensors()
 
 void mimirOpen::saveToSPIFFS(config data)
 {
+    Serial.println("Saving to SPIFFS");
     DynamicJsonDocument newConfigJson(1024);
-    newConfigJson["userName"] = data.userName;
-    newConfigJson["password"] = data.password;
+    newConfigJson["email"] = data.email;
+    newConfigJson["serialNumber"] = data.serialNumber;
     newConfigJson["deviceName"] = data.deviceName;
     newConfigJson["userId"] = data.userId;
     newConfigJson["deviceId"] = data.deviceId;
 
-    fs::File configFile = SPIFFS.open("/config.json", "w");
+    fs::File configFile = SPIFFS.open("/config.json", FILE_WRITE);
     if (!configFile)
     {
         Serial.println("failed to open config file for writing");
     }
-
     //serializeJson(newConfigJson, Serial);
     serializeJson(newConfigJson, configFile);
+    Serial.println("Successfully saved to SPIFFS");
+    serializeJsonPretty(newConfigJson, Serial);
     configFile.close();
 }
 
@@ -299,6 +357,7 @@ void mimirOpen::sendData(String address, DataPackage data)
 {
     if ((WiFi.status() == WL_CONNECTED))
     {
+        Serial.println("Sending Data...");
         String package = packageJSON(data);
         HTTPClient http;
         http.begin(address);
@@ -309,10 +368,53 @@ void mimirOpen::sendData(String address, DataPackage data)
         if (httpResponseCode > 0)
         {
             Serial.println("Successful Response from Server");
+            Serial.println(response);
         }
         else
         {
             Serial.println("Failed Response from Server");
+            Serial.println(response);
+        }
+        http.end();
+    }
+}
+
+void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
+{
+    config newConfig = _config;
+
+    if ((WiFi.status() == WL_CONNECTED))
+    {
+        Serial.println("Sending Auth...");
+        String package = packageAuthJSON(auth);
+        HTTPClient http;
+        http.begin(address);
+        http.addHeader("Content-Type", "application/json");
+        int httpResponseCode = http.POST(package);
+        String response = http.getString();
+
+        if (httpResponseCode > 0)
+        {
+            StaticJsonDocument<200> doc;
+            Serial.println("Successful Response from Server");
+            Serial.println(response);
+            deserializeJson(doc, response);
+            const char *userId = doc["userId"];
+            const char *deviceId = doc["deviceId"];
+            Serial.print("User ID: ");
+            Serial.println(userId);
+            Serial.print("Device ID: ");
+            Serial.println(deviceId);
+
+            newConfig.userId = userId;
+            newConfig.deviceId = deviceId;
+
+            saveToSPIFFS(newConfig);
+        }
+        else
+        {
+            Serial.println("Failed Response from Server");
+            Serial.println(response);
         }
         http.end();
     }
@@ -321,13 +423,96 @@ void mimirOpen::sendData(String address, DataPackage data)
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+void mimirOpen::loadBSECState()
+{
+    if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE)
+    {
+        // Existing state in EEPROM
+        Serial.println("Reading state from EEPROM");
 
-int mimirOpen::getBatteryPercent() {
+        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+        {
+            bsecState[i] = EEPROM.read(i + 1);
+            Serial.println(bsecState[i], HEX);
+        }
+
+        BME680.setState(bsecState);
+        checkBSECStatus();
+    }
+    else
+    {
+        // Erase the EEPROM with zeroes
+        Serial.println("Erasing EEPROM");
+
+        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE + 1; i++)
+            EEPROM.write(i, 0);
+
+        EEPROM.commit();
+    }
+}
+
+void mimirOpen::updateBSECState()
+{
+    if (BME680.iaqAccuracy >= 3)
+    {
+        BME680.getState(bsecState);
+        checkBSECStatus();
+        Serial.println("Writing state to EEPROM");
+        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+        {
+            EEPROM.write(i + 1, bsecState[i]);
+            Serial.println(bsecState[i], HEX);
+        }
+        EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
+        EEPROM.commit();
+    }
+    else
+    {
+        Serial.println("BME680 not yet calibrated");
+        Serial.println("Current Accuracy:" + String(BME680.iaqAccuracy));
+    }
+}
+
+void mimirOpen::checkBSECStatus()
+{
+    String output;
+    if (BME680.status != BSEC_OK)
+    {
+        if (BME680.status < BSEC_OK)
+        {
+            output = "BSEC error code : " + String(BME680.status);
+            Serial.println(output);
+        }
+        else
+        {
+            output = "BSEC warning code : " + String(BME680.status);
+            Serial.println(output);
+        }
+    }
+    if (BME680.bme680Status != BME680_OK)
+    {
+        if (BME680.bme680Status < BME680_OK)
+        {
+            output = "BME680 error code : " + String(BME680.bme680Status);
+            Serial.println(output);
+        }
+        else
+        {
+            output = "BME680 warning code : " + String(BME680.bme680Status);
+            Serial.println(output);
+        }
+    }
+    BME680.status = BSEC_OK;
+}
+
+int mimirOpen::getBatteryPercent()
+{
     int percent = 0;
     return percent;
 };
 
-systems mimirOpen::getStatus() {
+systems mimirOpen::getStatus()
+{
     systems current;
     current.battery = STATUS_BATTERY;
     current.batteryPercent = getBatteryPercent();
@@ -341,9 +526,10 @@ systems mimirOpen::getStatus() {
     return current;
 };
 
-float mimirOpen::calcAltitude(float pressure, float temperature) {
+float mimirOpen::calcAltitude(float pressure, float temperature)
+{
     float SEALEVELPRESSURE_HPA = 1013.25;
-    float altitude = 44330 * (1.0 - pow((pressure/100) / SEALEVELPRESSURE_HPA, 0.1903));
+    float altitude = 44330 * (1.0 - pow((pressure / 100) / SEALEVELPRESSURE_HPA, 0.1903));
     return altitude;
 };
 
@@ -417,6 +603,19 @@ void mimirOpen::logData(envData data, String filename)
     appendFile(SD, filename.c_str(), stringData(data, status).c_str());
 }
 
+String mimirOpen::packageAuthJSON(AuthPackage auth)
+{
+    DynamicJsonDocument package(1024);
+    String output;
+
+    package["email"] = auth.email;
+    package["serialNumber"] = auth.serialNumber;
+    package["macAddress"] = auth.macAddress;
+
+    serializeJsonPretty(package, output);
+    return output;
+}
+
 String mimirOpen::packageJSON(DataPackage _data)
 {
     DynamicJsonDocument package(1024);
@@ -459,42 +658,42 @@ String mimirOpen::packageJSON(DataPackage _data)
 String mimirOpen::stringData(envData data, systems status)
 {
     return DateStr + "," +
-        TimeStr + "," +
-        status.battery +
-        "," +
-        status.batteryPercent +
-        "," +
-        status.wifi +
-        "," +
-        status.sd +
-        "," +
-        status.server +
-        "," +
-        status.BME680 +
-        "," +
-        status.COMPAS +
-        "," +
-        status.SHT31 +
-        "," +
-        status.VEML6030 +
-        "," +
-        data.temperature +
-        "," +
-        data.humidity +
-        "," +
-        data.pressure +
-        "," +
-        data.altitude +
-        "," +
-        data.luminance +
-        "," +
-        data.iaq +
-        "," +
-        data.eVOC +
-        "," +
-        data.eCO2 +
-        "," +
-        data.bearing + "\r\n";
+           TimeStr + "," +
+           status.battery +
+           "," +
+           status.batteryPercent +
+           "," +
+           status.wifi +
+           "," +
+           status.sd +
+           "," +
+           status.server +
+           "," +
+           status.BME680 +
+           "," +
+           status.COMPAS +
+           "," +
+           status.SHT31 +
+           "," +
+           status.VEML6030 +
+           "," +
+           data.temperature +
+           "," +
+           data.humidity +
+           "," +
+           data.pressure +
+           "," +
+           data.altitude +
+           "," +
+           data.luminance +
+           "," +
+           data.iaq +
+           "," +
+           data.eVOC +
+           "," +
+           data.eCO2 +
+           "," +
+           data.bearing + "\r\n";
 }
 
 String mimirOpen::header()
@@ -540,17 +739,13 @@ void mimirOpen::SLEEP(long interval)
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 
     //CONFIG Sleep Timer
-    Serial.println("Config Sleep Timer");                                                           // Wake if GPIO is low
-    long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)) + 30; //Some ESP32 are too fast to maintain accurate time
+    Serial.println("Config Sleep Timer");                                                 // Wake if GPIO is low
+    long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)); //Some ESP32 are too fast to maintain accurate time
     esp_sleep_enable_timer_wakeup(SleepTimer * 1000000LL);
 
     Serial.println("Entering " + String(SleepTimer) + "-secs of sleep time");
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
     Serial.println("Starting deep-sleep...");
-
-    delay(100);
-    pixel.ClearTo(black);
-    pixel.Show();
 
     delay(100);
     esp_deep_sleep_start();
@@ -584,6 +779,83 @@ bool mimirOpen::UpdateLocalTime()
     DateStr = day_output;
     TimeStr = output;
     return true;
+}
+void mimirOpen::printBootReason()
+{
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+
+    switch (reset_reason)
+    {
+    case ESP_RST_UNKNOWN:
+        Serial.println("Reset reason can not be determined");
+        break;
+    case ESP_RST_POWERON:
+        Serial.println("Reset due to power-on event");
+        break;
+    case ESP_RST_EXT:
+        Serial.println("Reset by external pin (not applicable for ESP32)");
+        break;
+    case ESP_RST_SW:
+        Serial.println("Software reset via esp_restart");
+        break;
+    case ESP_RST_PANIC:
+        Serial.println("Software reset due to exception/panic");
+        break;
+    case ESP_RST_INT_WDT:
+        Serial.println("Reset (software or hardware) due to interrupt watchdog");
+        break;
+    case ESP_RST_TASK_WDT:
+        Serial.println("Reset due to task watchdog");
+        break;
+    case ESP_RST_WDT:
+        Serial.println("Reset due to other watchdogs");
+        break;
+    case ESP_RST_DEEPSLEEP:
+        Serial.println("Reset after exiting deep sleep mode");
+        break;
+    case ESP_RST_BROWNOUT:
+        Serial.println("Brownout reset (software or hardware)");
+        break;
+    case ESP_RST_SDIO:
+        Serial.println("Reset over SDIO");
+        break;
+    }
+
+    if (reset_reason == ESP_RST_DEEPSLEEP)
+    {
+        esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+        switch (wakeup_reason)
+        {
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+            Serial.println("In case of deep sleep: reset was not caused by exit from deep sleep");
+            break;
+        case ESP_SLEEP_WAKEUP_ALL:
+            Serial.println("Not a wakeup cause: used to disable all wakeup sources with esp_sleep_disable_wakeup_source");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT0:
+            Serial.println("Wakeup caused by external signal using RTC_IO");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT1:
+            Serial.println("Wakeup caused by external signal using RTC_CNTL");
+            break;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            Serial.println("Wakeup caused by timer");
+            break;
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:
+            Serial.println("Wakeup caused by touchpad");
+            break;
+        case ESP_SLEEP_WAKEUP_ULP:
+            Serial.println("Wakeup caused by ULP program");
+            break;
+        case ESP_SLEEP_WAKEUP_GPIO:
+            Serial.println("Wakeup caused by GPIO (light sleep only)");
+            break;
+        case ESP_SLEEP_WAKEUP_UART:
+            Serial.println("Wakeup caused by UART (light sleep only)");
+            break;
+        }
+    }
 }
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////
