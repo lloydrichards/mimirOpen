@@ -59,6 +59,7 @@ struct envData
     float altitude;
     float luminance;
     float iaq;
+    float iaqAccuracy;
     float eVOC;
     float eCO2;
     int bearing;
@@ -141,7 +142,7 @@ private:
     void loadBSECState();
     void updateBSECState();
     void checkBSECStatus();
-    
+
     int getBatteryPercent();
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);

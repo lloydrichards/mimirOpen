@@ -293,6 +293,7 @@ envData mimirOpen::readSensors()
     data.altitude = calcAltitude(BME680.pressure, avgTemp);
     data.luminance = (float)VEML6030.readLight();
     data.iaq = BME680.iaq;
+    data.iaqAccuracy = BME680.iaqAccuracy;
     data.eCO2 = BME680.co2Equivalent;
     data.eVOC = BME680.breathVocEquivalent;
 
@@ -647,6 +648,7 @@ String mimirOpen::packageJSON(DataPackage _data)
     data["altitude"] = _data.data.altitude;
     data["luminance"] = _data.data.luminance;
     data["iaq"] = _data.data.iaq;
+    data["iaqAccuracy"] = _data.data.iaqAccuracy;
     data["eVOC"] = _data.data.eVOC;
     data["eCO2"] = _data.data.eCO2;
     data["bearing"] = _data.data.bearing;
@@ -689,6 +691,8 @@ String mimirOpen::stringData(envData data, systems status)
            "," +
            data.iaq +
            "," +
+           data.iaqAccuracy +
+           "," +
            data.eVOC +
            "," +
            data.eCO2 +
@@ -698,7 +702,7 @@ String mimirOpen::stringData(envData data, systems status)
 
 String mimirOpen::header()
 {
-    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,eVOC,eCO2,bearing\r\n";
+    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,iaqAccuracy,eVOC,eCO2,bearing\r\n";
     return output;
 }
 
@@ -739,7 +743,7 @@ void mimirOpen::SLEEP(long interval)
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 
     //CONFIG Sleep Timer
-    Serial.println("Config Sleep Timer");                                                 // Wake if GPIO is low
+    Serial.println("Config Sleep Timer");                                            // Wake if GPIO is low
     long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)); //Some ESP32 are too fast to maintain accurate time
     esp_sleep_enable_timer_wakeup(SleepTimer * 1000000LL);
 
