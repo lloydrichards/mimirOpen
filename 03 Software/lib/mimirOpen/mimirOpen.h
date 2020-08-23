@@ -101,6 +101,7 @@ public:
     void logData(envData data, String filename = "/0000-00-00.txt");
 
     //Helping
+    void printBootReason();
     String stringData(envData data, systems sys);
     systems getStatus();
     void WiFi_ON();

@@ -231,7 +231,7 @@ config mimirOpen::initSPIFFS()
                     return newConfig;
                 }
                 Serial.println("\nparsed json");
-                serializeJson(configJson, Serial);
+                serializeJsonPretty(configJson, Serial);
 
                 newConfig.email = configJson["email"].as<String>();
                 newConfig.serialNumber = configJson["serialNumber"].as<String>();
@@ -316,7 +316,7 @@ void mimirOpen::saveToSPIFFS(config data)
     //serializeJson(newConfigJson, Serial);
     serializeJson(newConfigJson, configFile);
     Serial.println("Successfully saved to SPIFFS");
-    serializeJson(newConfigJson, Serial);
+    serializeJsonPretty(newConfigJson, Serial);
     configFile.close();
 }
 
@@ -656,10 +656,6 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Starting deep-sleep...");
 
     delay(100);
-    pixel.ClearTo(black);
-    pixel.Show();
-
-    delay(100);
     esp_deep_sleep_start();
 }
 
@@ -691,6 +687,43 @@ bool mimirOpen::UpdateLocalTime()
     DateStr = day_output;
     TimeStr = output;
     return true;
+}
+void mimirOpen::printBootReason()
+{
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+
+    switch (reset_reason)
+    {
+    case ESP_RST_UNKNOWN:    Serial.println("Reset reason can not be determined"); break;
+    case ESP_RST_POWERON:    Serial.println("Reset due to power-on event"); break;
+    case ESP_RST_EXT:        Serial.println("Reset by external pin (not applicable for ESP32)"); break;
+    case ESP_RST_SW:         Serial.println("Software reset via esp_restart"); break;
+    case ESP_RST_PANIC:      Serial.println("Software reset due to exception/panic"); break;
+    case ESP_RST_INT_WDT:    Serial.println("Reset (software or hardware) due to interrupt watchdog"); break;
+    case ESP_RST_TASK_WDT:   Serial.println("Reset due to task watchdog"); break;
+    case ESP_RST_WDT:        Serial.println("Reset due to other watchdogs"); break;
+    case ESP_RST_DEEPSLEEP:  Serial.println("Reset after exiting deep sleep mode"); break;
+    case ESP_RST_BROWNOUT:   Serial.println("Brownout reset (software or hardware)"); break;
+    case ESP_RST_SDIO:       Serial.println("Reset over SDIO"); break;
+    }
+
+    if (reset_reason == ESP_RST_DEEPSLEEP)
+    {
+        esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+        switch(wakeup_reason)
+        { 
+            case ESP_SLEEP_WAKEUP_UNDEFINED:    Serial.println("In case of deep sleep: reset was not caused by exit from deep sleep"); break;
+            case ESP_SLEEP_WAKEUP_ALL:          Serial.println("Not a wakeup cause: used to disable all wakeup sources with esp_sleep_disable_wakeup_source"); break;
+            case ESP_SLEEP_WAKEUP_EXT0:         Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+            case ESP_SLEEP_WAKEUP_EXT1:         Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+            case ESP_SLEEP_WAKEUP_TIMER:        Serial.println("Wakeup caused by timer"); break;
+            case ESP_SLEEP_WAKEUP_TOUCHPAD:     Serial.println("Wakeup caused by touchpad"); break;
+            case ESP_SLEEP_WAKEUP_ULP:          Serial.println("Wakeup caused by ULP program"); break;
+            case ESP_SLEEP_WAKEUP_GPIO:         Serial.println("Wakeup caused by GPIO (light sleep only)"); break;
+            case ESP_SLEEP_WAKEUP_UART:         Serial.println("Wakeup caused by UART (light sleep only)"); break;
+        }
+    }
 }
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////

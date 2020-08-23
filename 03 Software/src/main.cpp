@@ -12,6 +12,8 @@
 //
 #include <Arduino.h>
 #include "mimirOpen.h"
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 mimirOpen mimir(115200);
 DataPackage sendData;
@@ -23,11 +25,10 @@ void setup()
 {
 
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    Serial.print("Wakeup Reason: ");
-    Serial.println(wakeup_reason);
-    config config = mimir.initSPIFFS();
+    mimir.printBootReason();
     if (bootCount == 0)
     {
+        config config = mimir.initSPIFFS();
         config.email = "tester@word.com";
         config.serialNumber = "test";
         config.deviceName = "Test";
@@ -40,6 +41,7 @@ void setup()
         mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, config);
         mimir.WiFi_OFF();
     }
+    config config = mimir.initSPIFFS();
     mimir.initMicroSD("/testing.txt");
     mimir.initSensors();
 
@@ -58,15 +60,18 @@ void setup()
     sendData.data = data;
 
     //Everything that happens with the server happens in here
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+    delay(500);
     mimir.WiFi_ON();
     mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData);
     mimir.WiFi_OFF();
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
 
     mimir.saveToSPIFFS(config);
-    
+
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
-    ++bootCount;
+    bootCount++;
     mimir.SLEEP(15);
 }
 
