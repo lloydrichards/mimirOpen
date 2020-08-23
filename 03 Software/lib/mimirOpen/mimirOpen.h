@@ -25,7 +25,7 @@ enum SYS_STATUS
 struct config
 {
     String email;
-    String password;
+    String serialNumber;
     String deviceName;
     String userId;
     String deviceId;
@@ -64,17 +64,19 @@ struct envData
     int bearing;
 };
 
-struct DataPackage {
+struct DataPackage
+{
     authType auth;
     systems status;
     envData data;
 };
 
-struct AuthPackage {
+struct AuthPackage
+{
     String email;
-    String deviceId;
-    String macAddress
-}
+    String serialNumber;
+    String macAddress;
+};
 
 class mimirOpen
 {
@@ -85,12 +87,14 @@ public:
     //Init
     void initPixels(int brightness = 64);
     void initSensors();
-    void initMicroSD(String filename ="/0000-00-00.txt");
+    void initMicroSD(String filename = "/0000-00-00.txt");
     void initWIFI(config config);
+    void forceWIFI(config config);
     config initSPIFFS();
 
     //Main
     void saveToSPIFFS(config data);
+    void sendAuth(String address, AuthPackage auth, config config);
     void sendData(String address, DataPackage data);
     envData readSensors();
     void printSensors(envData data);
@@ -123,19 +127,20 @@ private:
     int wifi_signal;
     int batteryPercent;
 
-    SYS_STATUS STATUS_BATTERY =UNMOUNTED;
-    SYS_STATUS STATUS_WIFI =UNMOUNTED;
-    SYS_STATUS STATUS_SD=UNMOUNTED;
-    SYS_STATUS STATUS_SERVER=UNMOUNTED;
-    SYS_STATUS STATUS_BME680=UNMOUNTED;
-    SYS_STATUS STATUS_COMPAS=UNMOUNTED;
-    SYS_STATUS STATUS_SHT31=UNMOUNTED;
-    SYS_STATUS STATUS_VEML6030=UNMOUNTED;
+    SYS_STATUS STATUS_BATTERY = UNMOUNTED;
+    SYS_STATUS STATUS_WIFI = UNMOUNTED;
+    SYS_STATUS STATUS_SD = UNMOUNTED;
+    SYS_STATUS STATUS_SERVER = UNMOUNTED;
+    SYS_STATUS STATUS_BME680 = UNMOUNTED;
+    SYS_STATUS STATUS_COMPAS = UNMOUNTED;
+    SYS_STATUS STATUS_SHT31 = UNMOUNTED;
+    SYS_STATUS STATUS_VEML6030 = UNMOUNTED;
 
     //Helper
     int getBatteryPercent();
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
+    String packageAuthJSON(AuthPackage auth);
     String packageJSON(DataPackage data);
     String header();
     bool SetupTime();
