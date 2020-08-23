@@ -52,27 +52,28 @@ void setup()
     envData data = mimir.readSensors();
     mimir.printSensors(data);
     mimir.logData(data, "/testing.txt");
+    if (bootCount % 3 == 0)
+    {
+        sendData.auth.deviceId = config.deviceId;
+        sendData.auth.userId = config.userId;
+        sendData.auth.macAddress = WiFi.macAddress();
+        sendData.status = mimir.getStatus();
+        sendData.data = data;
 
-    sendData.auth.deviceId = config.deviceId;
-    sendData.auth.userId = config.userId;
-    sendData.auth.macAddress = WiFi.macAddress();
-    sendData.status = mimir.getStatus();
-    sendData.data = data;
-
-    //Everything that happens with the server happens in here
-    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-    delay(500);
-    mimir.WiFi_ON();
-    mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData);
-    mimir.WiFi_OFF();
-    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
-
+        //Everything that happens with the server happens in here
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+        delay(500);
+        mimir.WiFi_ON();
+        mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData);
+        mimir.WiFi_OFF();
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
+    }
     mimir.saveToSPIFFS(config);
 
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;
-    mimir.SLEEP(15);
+    mimir.SLEEP(5);
 }
 
 void loop()

@@ -138,6 +138,10 @@ private:
     SYS_STATUS STATUS_VEML6030 = UNMOUNTED;
 
     //Helper
+    void loadBSECState();
+    void updateBSECState();
+    void checkBSECStatus();
+    
     int getBatteryPercent();
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
