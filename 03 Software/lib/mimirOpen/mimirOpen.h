@@ -6,6 +6,7 @@
 #include <SD.h>
 #include "time.h"
 #include <WiFiManager.h>
+#include <NeoPixelBus.h>
 
 #define addrSHT31D 0x45
 #define addrVEML6030 0x48
@@ -16,6 +17,7 @@
 #define BATTERY_PIN 12
 #define PIXEL_PIN 33
 #define PIXEL_PWR_PIN 32
+#define PIXEL_COUNT 5
 #define ENVIRO_PIN 25
 #define RADAR_PIN 27
 #define MONITOR_PIN 26
@@ -31,12 +33,21 @@ enum SYS_STATUS
 
 enum BAT_STATUS
 {
-  CRITICAL_BATTERY,
-  LOW_BATTERY,
-  GOOD_BATTERY,
-  FULL_BATTERY,
-  CHARGING
+    CRITICAL_BATTERY,
+    LOW_BATTERY,
+    GOOD_BATTERY,
+    FULL_BATTERY,
+    CHARGING
 
+};
+
+enum SYS_PIXEL
+{
+    BATTERY,
+    MICROSD,
+    SENSORS,
+    SERVER,
+    WIFI
 };
 
 struct config
@@ -103,7 +114,8 @@ public:
     mimirOpen(int baudRate = 115200);
 
     //Init
-    void initPixels(int brightness = 64);
+    void initPixels();
+
     void initSensors();
     void initMicroSD(String filename = "/0000-00-00.txt");
     void initWIFI(config config);
@@ -122,6 +134,8 @@ public:
     float getBatteryVoltage();
     int getBatteryPercent(float voltage);
     void printBootReason();
+    void pixelStatus(systems sys, int duration = 100);
+    void pixelSystemBusy(SYS_PIXEL system, RgbColor colour);
     String stringData(envData data, systems sys);
     systems getStatus();
     void WiFi_ON();
@@ -134,12 +148,6 @@ public:
     void testPixels(int repeat = 5, int _delay = 100);
 
 private:
-    String _IP_ADDRESS;
-    char _USER[40];
-    char _USER_ID[40];
-    char _DEVICE_ID[40];
-    char MIMIR_VERSION[10] = "P2005.2";
-
     String TimeStr, DateStr, ErrorMessage; // strings to hold time and date
     const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 
@@ -161,7 +169,9 @@ private:
     void loadBSECState();
     void updateBSECState();
     void checkBSECStatus();
-
+    void turnOFFPixels();
+    RgbColor pixelSystemColour(SYS_STATUS stat);
+    RgbColor pixelBatteryColour(BAT_STATUS battery);
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
     String packageAuthJSON(AuthPackage auth);

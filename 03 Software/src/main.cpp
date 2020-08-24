@@ -23,9 +23,14 @@ RTC_DATA_ATTR int bootCount = 0;
 
 void setup()
 {
-
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     mimir.printBootReason();
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0)
+    {
+        mimir.initPixels();
+        mimir.testPixels(1, 500);
+    }
+
     if (bootCount == 0)
     {
         config config = mimir.initSPIFFS();
@@ -60,6 +65,8 @@ void setup()
         sendData.status = mimir.getStatus();
         sendData.data = data;
 
+        mimir.initPixels();
+        mimir.testPixels(1, 100);
         //Everything that happens with the server happens in here
         WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
         delay(500);
@@ -70,15 +77,15 @@ void setup()
     }
     mimir.saveToSPIFFS(config);
 
-float batVolt = mimir.getBatteryVoltage();
-int batPerc = mimir.getBatteryPercent(batVolt);
+    float batVolt = mimir.getBatteryVoltage();
+    int batPerc = mimir.getBatteryPercent(batVolt);
 
-Serial.print("Battery Voltage: ");
-Serial.println(batVolt);
-Serial.print("Battery Percent: ");
-Serial.println(batPerc);
-Serial.print("Battery Status: ");
-Serial.println(sendData.status.battery);
+    Serial.print("Battery Voltage: ");
+    Serial.println(batVolt);
+    Serial.print("Battery Percent: ");
+    Serial.println(batPerc);
+    Serial.print("Battery Status: ");
+    Serial.println(sendData.status.battery);
 
     Serial.print("Boot Count: ");
     Serial.println(bootCount);

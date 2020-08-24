@@ -15,8 +15,8 @@ SPIClass spiSD(HSPI);
 #include <HTTPClient.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
+#include <NeoPixelBus.h>
 
-#include <NeoPixelBrightnessBus.h>
 #include "Adafruit_SHT31.h"                         //https://github.com/adafruit/Adafruit_SHT31
 #include "SparkFun_VEML6030_Ambient_Light_Sensor.h" //https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library
 #include "bsec.h"
@@ -41,18 +41,17 @@ float gain = .125;
 int integTime = 100;
 
 //Define Pixels
-#define PIXEL_PIN 19
-#define PIXEL_COUNT 5
+#define colorSaturation 128
 
-NeoPixelBrightnessBus<NeoGrbFeature, Neo800KbpsMethod> pixel(PIXEL_COUNT, PIXEL_PIN);
+NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> pixel(PIXEL_COUNT, PIXEL_PIN);
 
-RgbColor red(50, 0, 0);
-RgbColor green(0, 50, 0);
-RgbColor blue(0, 0, 50);
-RgbColor yellow(25, 25, 0);
-RgbColor purple(25, 0, 25);
-RgbColor lightBlue(0, 25, 25);
-RgbColor white(128);
+RgbColor red(colorSaturation, 0, 0);
+RgbColor yellow(64, 64, 0);
+RgbColor green(0, colorSaturation, 0);
+RgbColor teal(0, 64, 64);
+RgbColor blue(0, 0, colorSaturation);
+RgbColor violet(64, 0, 64);
+RgbColor white(colorSaturation);
 RgbColor black(0);
 
 mimirOpen::mimirOpen(int baudRate)
@@ -61,12 +60,11 @@ mimirOpen::mimirOpen(int baudRate)
     StartTime = millis();
 }
 
-void mimirOpen::initPixels(int brightness)
+void mimirOpen::initPixels()
 {
     Serial.println("Starting Pixels...");
     pixel.Begin();
     pixel.Show();
-    pixel.SetBrightness(brightness);
 }
 
 void mimirOpen::initSensors()
@@ -450,7 +448,7 @@ int mimirOpen::getBatteryPercent(float volt)
     const float battery_max = 4.2; //maximum voltage of battery
     const float battery_min = 3.0; //minimum voltage of battery before shutdown
     batteryPercent = roundf(((volt - battery_min) / (battery_max - battery_min)) * 100);
-    
+
     if (batteryPercent < 10)
     {
         STATUS_BATTERY = CRITICAL_BATTERY;
@@ -569,6 +567,61 @@ systems mimirOpen::getStatus()
     current.VEML6030 = STATUS_VEML6030;
     return current;
 };
+
+void mimirOpen::pixelStatus(systems sys, int duration)
+{
+    pixel.SetPixelColor(0, pixelBatteryColour(sys.battery));
+    pixel.SetPixelColor(1, pixelSystemColour(sys.sd));
+    pixel.SetPixelColor(2, pixelSystemColour(sys.BME680));
+    pixel.SetPixelColor(3, pixelSystemColour(sys.server));
+    pixel.SetPixelColor(4, pixelSystemColour(sys.wifi));
+    pixel.Show();
+    delay(duration);
+    turnOFFPixels();
+}
+
+void mimirOpen::pixelSystemBusy(SYS_PIXEL system, RgbColor colour)
+{
+    pixel.SetPixelColor(system, colour);
+    pixel.Show();
+}
+
+RgbColor mimirOpen::pixelSystemColour(SYS_STATUS stat)
+{
+    switch (stat)
+    {
+    case ERROR_L:
+        return red;
+    case ERROR_R:
+        return red;
+    case ERROR_W:
+        return red;
+    case UNMOUNTED:
+        return black;
+    case OKAY:
+        return green;
+    default:
+        return black;
+    };
+}
+RgbColor mimirOpen::pixelBatteryColour(BAT_STATUS battery)
+{
+    switch (battery)
+    {
+    case CRITICAL_BATTERY:
+        return red;
+    case LOW_BATTERY:
+        return yellow;
+    case GOOD_BATTERY:
+        return green;
+    case FULL_BATTERY:
+        return green;
+    case CHARGING:
+        return blue;
+    default:
+        return black;
+    };
+}
 
 float mimirOpen::calcAltitude(float pressure, float temperature)
 {
@@ -777,11 +830,11 @@ void mimirOpen::WiFi_OFF()
 void mimirOpen::SLEEP(long interval)
 {
     //CONFIG Sleep Pin
-    //Serial.println("Config Sleep Pin");
-    // gpio_pullup_en(GPIO_NUM_32);    // use pullup on GPIO
-    // gpio_pullup_en(GPIO_NUM_33);    // use pullup on GPIO
-    // gpio_pulldown_dis(GPIO_NUM_32); // not use pulldown on GPIO
-    // gpio_pulldown_dis(GPIO_NUM_33); // not use pulldown on GPIO
+    Serial.println("Config Sleep Pin");
+    gpio_pullup_en(GPIO_NUM_26);    // use pullup on GPIO
+    gpio_pulldown_dis(GPIO_NUM_26); // not use pulldown on GPIO
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26,LOW);
+    Serial.println("Wake Pin: " + MONITOR_PIN);
 
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 
@@ -789,6 +842,7 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Config Sleep Timer");                                            // Wake if GPIO is low
     long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)); //Some ESP32 are too fast to maintain accurate time
     esp_sleep_enable_timer_wakeup(SleepTimer * 1000000LL);
+    turnOFFPixels();
 
     Serial.println("Entering " + String(SleepTimer) + "-secs of sleep time");
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
@@ -904,6 +958,15 @@ void mimirOpen::printBootReason()
         }
     }
 }
+
+void mimirOpen::turnOFFPixels()
+{
+    for (int i = 0; i < PIXEL_COUNT; i++)
+    {
+        pixel.SetPixelColor(i, black);
+    }
+    pixel.Show();
+}
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
@@ -948,7 +1011,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, red);
         pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
@@ -956,7 +1019,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, green);
         pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
@@ -964,31 +1027,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, blue);
         pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, yellow);
-        pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, purple);
-        pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, lightBlue);
-        pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
