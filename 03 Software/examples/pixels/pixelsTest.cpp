@@ -14,7 +14,7 @@
 #include <NeoPixelBus.h>
 
 const uint16_t PixelCount = 5; // this example assumes 4 pixels, making it smaller will cause a failure
-const uint8_t PixelPin = 39;   // make sure to set this to the correct pin, ignored for Esp8266
+const uint8_t PixelPin = 33;   // make sure to set this to the correct pin, ignored for Esp8266
 
 #define colorSaturation 128
 
@@ -71,7 +71,7 @@ void setup()
     Serial.println("Initializing...");
     Serial.flush();
 
-    pinMode(36, HIGH); //Set the NPN on
+    pinMode(32, LOW); //Set the NPN on
 
     // this resets all the neopixels to an off state
     strip.Begin();
@@ -93,6 +93,7 @@ void loop()
     strip.SetPixelColor(1, green);
     strip.SetPixelColor(2, blue);
     strip.SetPixelColor(3, white);
+    strip.SetPixelColor(4, red);
     // the following line demonstrates rgbw color support
     // if the NeoPixels are rgbw types the following line will compile
     // if the NeoPixels are anything else, the following line will give an error
@@ -108,6 +109,7 @@ void loop()
     strip.SetPixelColor(1, black);
     strip.SetPixelColor(2, black);
     strip.SetPixelColor(3, black);
+    strip.SetPixelColor(4, black);
     strip.Show();
 
     delay(5000);
@@ -120,6 +122,7 @@ void loop()
     strip.SetPixelColor(1, hslGreen);
     strip.SetPixelColor(2, hslBlue);
     strip.SetPixelColor(3, hslWhite);
+    strip.SetPixelColor(4, hslBlue);
     strip.Show();
 
     delay(5000);
@@ -131,5 +134,6 @@ void loop()
     strip.SetPixelColor(1, hslBlack);
     strip.SetPixelColor(2, hslBlack);
     strip.SetPixelColor(3, hslBlack);
+    strip.SetPixelColor(4, hslBlack);
     strip.Show();
 }
