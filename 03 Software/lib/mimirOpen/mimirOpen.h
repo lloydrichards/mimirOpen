@@ -13,6 +13,13 @@
 #define addrBME680 0x76
 #define addrCompas 0X0C
 
+#define BATTERY_PIN 12
+#define PIXEL_PIN 33
+#define PIXEL_PWR_PIN 32
+#define ENVIRO_PIN 25
+#define RADAR_PIN 27
+#define MONITOR_PIN 26
+
 enum SYS_STATUS
 {
     ERROR_L = -3,
@@ -20,6 +27,16 @@ enum SYS_STATUS
     ERROR_W = -1,
     UNMOUNTED = 0,
     OKAY = 1
+};
+
+enum BAT_STATUS
+{
+  CRITICAL_BATTERY,
+  LOW_BATTERY,
+  GOOD_BATTERY,
+  FULL_BATTERY,
+  CHARGING
+
 };
 
 struct config
@@ -40,13 +57,13 @@ struct authType
 
 struct systems
 {
-    SYS_STATUS battery;
+    BAT_STATUS battery;
     int batteryPercent;
     SYS_STATUS wifi;
     SYS_STATUS sd;
     SYS_STATUS server;
     SYS_STATUS BME680;
-    SYS_STATUS COMPAS;
+    SYS_STATUS LSM303;
     SYS_STATUS SHT31;
     SYS_STATUS VEML6030;
 };
@@ -102,6 +119,8 @@ public:
     void logData(envData data, String filename = "/0000-00-00.txt");
 
     //Helping
+    float getBatteryVoltage();
+    int getBatteryPercent(float voltage);
     void printBootReason();
     String stringData(envData data, systems sys);
     systems getStatus();
@@ -129,12 +148,12 @@ private:
     int wifi_signal;
     int batteryPercent;
 
-    SYS_STATUS STATUS_BATTERY = UNMOUNTED;
+    BAT_STATUS STATUS_BATTERY;
     SYS_STATUS STATUS_WIFI = UNMOUNTED;
     SYS_STATUS STATUS_SD = UNMOUNTED;
     SYS_STATUS STATUS_SERVER = UNMOUNTED;
     SYS_STATUS STATUS_BME680 = UNMOUNTED;
-    SYS_STATUS STATUS_COMPAS = UNMOUNTED;
+    SYS_STATUS STATUS_LSM303 = UNMOUNTED;
     SYS_STATUS STATUS_SHT31 = UNMOUNTED;
     SYS_STATUS STATUS_VEML6030 = UNMOUNTED;
 
@@ -143,7 +162,6 @@ private:
     void updateBSECState();
     void checkBSECStatus();
 
-    int getBatteryPercent();
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
     String packageAuthJSON(AuthPackage auth);

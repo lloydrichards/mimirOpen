@@ -70,6 +70,16 @@ void setup()
     }
     mimir.saveToSPIFFS(config);
 
+float batVolt = mimir.getBatteryVoltage();
+int batPerc = mimir.getBatteryPercent(batVolt);
+
+Serial.print("Battery Voltage: ");
+Serial.println(batVolt);
+Serial.print("Battery Percent: ");
+Serial.println(batPerc);
+Serial.print("Battery Status: ");
+Serial.println(sendData.status.battery);
+
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;

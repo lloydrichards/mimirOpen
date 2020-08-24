@@ -20,13 +20,14 @@ SPIClass spiSD(HSPI);
 #include "Adafruit_SHT31.h"                         //https://github.com/adafruit/Adafruit_SHT31
 #include "SparkFun_VEML6030_Ambient_Light_Sensor.h" //https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library
 #include "bsec.h"
-#include <HSCDTD008A.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_LIS2MDL.h>
 
 //Define Sensors
 Adafruit_SHT31 SHT31 = Adafruit_SHT31();
 SparkFun_Ambient_Light VEML6030(addrVEML6030);
 Bsec BME680;
-HSCDTD008A COMPAS(Wire, addrCompas);
+Adafruit_LIS2MDL LSM303 = Adafruit_LIS2MDL();
 
 //BME680 State
 const uint8_t bsec_config_iaq[] = {
@@ -107,16 +108,15 @@ void mimirOpen::initSensors()
         STATUS_BME680 = ERROR_L;
         Serial.println("BME680 Failed!");
     }
-    if (COMPAS.begin())
+    if (LSM303.begin())
     {
-        COMPAS.calibrate();
         Serial.println("Compass Success!");
-        STATUS_COMPAS = OKAY;
+        STATUS_LSM303 = OKAY;
     }
     else
     {
         Serial.println("Compass Failed!");
-        STATUS_COMPAS = ERROR_L;
+        STATUS_LSM303 = ERROR_L;
     }
 }
 
@@ -269,6 +269,7 @@ config mimirOpen::initSPIFFS()
 envData mimirOpen::readSensors()
 {
     envData data;
+    sensors_event_t event;
     bsec_virtual_sensor_t BME680Readings[10] = {
         BSEC_OUTPUT_RAW_TEMPERATURE,
         BSEC_OUTPUT_RAW_PRESSURE,
@@ -298,15 +299,9 @@ envData mimirOpen::readSensors()
     data.eVOC = BME680.breathVocEquivalent;
 
     updateBSECState();
-    if (COMPAS.measure())
-    {
-        data.bearing = ((atan2(COMPAS.y(), COMPAS.x())) * 180) / PI;
-        STATUS_COMPAS = OKAY;
-    }
-    else
-    {
-        STATUS_COMPAS = ERROR_R;
-    }
+    LSM303.getEvent(&event);
+    data.bearing = (atan2(event.magnetic.y, event.magnetic.x) * 180) / PI;
+
     return data;
 }
 
@@ -424,6 +419,60 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+
+float mimirOpen::getBatteryVoltage()
+{
+    pinMode(BATTERY_PIN, INPUT);
+    long sum = 0;
+    float voltage = 0.0; // calculated voltage
+
+    float R1 = 100000.0; // resistance of R1 (1M)
+    float R2 = 100000.0; // resistance of R2 (1M)
+
+    for (int i = 0; i < 500; i++)
+    {
+        sum += analogRead(BATTERY_PIN);
+        delayMicroseconds(1000);
+    }
+    // calculate the voltage
+    voltage = sum / (float)500;
+    voltage = (voltage * 1.98) / 4096.0 * 2.101; //for internal 1.1v reference
+                                                 // use if added divider circuit
+    //voltage = voltage / (R2 / (R1 + R2));
+    //round value by two precision
+    //voltage = roundf(voltage * 100) / 100;
+
+    return voltage;
+}
+
+int mimirOpen::getBatteryPercent(float volt)
+{
+    const float battery_max = 4.2; //maximum voltage of battery
+    const float battery_min = 3.0; //minimum voltage of battery before shutdown
+    batteryPercent = roundf(((volt - battery_min) / (battery_max - battery_min)) * 100);
+    
+    if (batteryPercent < 10)
+    {
+        STATUS_BATTERY = CRITICAL_BATTERY;
+    }
+    else if (batteryPercent < 20)
+    {
+        STATUS_BATTERY = LOW_BATTERY;
+    }
+    else if (batteryPercent < 95)
+    {
+        STATUS_BATTERY = GOOD_BATTERY;
+    }
+    else if (batteryPercent < 100)
+    {
+        STATUS_BATTERY = FULL_BATTERY;
+    }
+    else if (batteryPercent >= 100)
+    {
+        STATUS_BATTERY = CHARGING;
+    }
+    return batteryPercent;
+}
 void mimirOpen::loadBSECState()
 {
     if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE)
@@ -506,22 +555,16 @@ void mimirOpen::checkBSECStatus()
     BME680.status = BSEC_OK;
 }
 
-int mimirOpen::getBatteryPercent()
-{
-    int percent = 0;
-    return percent;
-};
-
 systems mimirOpen::getStatus()
 {
     systems current;
+    current.batteryPercent = getBatteryPercent(getBatteryVoltage());
     current.battery = STATUS_BATTERY;
-    current.batteryPercent = getBatteryPercent();
     current.sd = STATUS_SD;
     current.server = STATUS_SERVER;
     current.wifi = STATUS_WIFI;
     current.BME680 = STATUS_BME680;
-    current.COMPAS = STATUS_COMPAS;
+    current.LSM303 = STATUS_LSM303;
     current.SHT31 = STATUS_SHT31;
     current.VEML6030 = STATUS_VEML6030;
     return current;
@@ -588,7 +631,7 @@ void mimirOpen::logData(envData data, String filename)
     status.sd = STATUS_SD;
     status.server = STATUS_SERVER;
     status.BME680 = STATUS_BME680;
-    status.COMPAS = STATUS_COMPAS;
+    status.LSM303 = STATUS_LSM303;
     status.SHT31 = STATUS_SHT31;
     status.VEML6030 = STATUS_VEML6030;
 
@@ -636,7 +679,7 @@ String mimirOpen::packageJSON(DataPackage _data)
     status["sd"] = _data.status.sd;
     status["server"] = _data.status.server;
     status["BME680"] = _data.status.BME680;
-    status["COMPAS"] = _data.status.COMPAS;
+    status["LSM303"] = _data.status.LSM303;
     status["SHT31"] = _data.status.SHT31;
     status["VEML6030"] = _data.status.VEML6030;
 
@@ -673,7 +716,7 @@ String mimirOpen::stringData(envData data, systems status)
            "," +
            status.BME680 +
            "," +
-           status.COMPAS +
+           status.LSM303 +
            "," +
            status.SHT31 +
            "," +
