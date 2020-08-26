@@ -46,7 +46,7 @@ void setup()
     {
         Serial.println("\nMonitor Button was pressed!");
         mimir.initPixels();
-        mimir.changeMode(8000);
+        mimir.changeMode(config, 8000);
     }
 
     ///////////////////////////////////////////////////
@@ -100,7 +100,7 @@ void setup()
     ///////////////////////////////////////////////////
     /////////////////////SLEEP TIME////////////////////
     ///////////////////////////////////////////////////
-    mimir.saveToSPIFFS(config);
+
     mimir.printBSECState("Current State", BSECState);
     Serial.print("Boot Count: ");
     Serial.println(bootCount);

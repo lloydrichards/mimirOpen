@@ -50,6 +50,13 @@ enum SYS_PIXEL
     WIFI
 };
 
+enum SYS_MODE
+{
+    ENVIRO,
+    MONITOR,
+    RADAR
+};
+
 struct config
 {
     String email;
@@ -57,12 +64,14 @@ struct config
     String deviceName;
     String userId;
     String deviceId;
+    int mode;
 };
 
 struct authType
 {
     String userId;
     String deviceId;
+    String serialNumber;
     String macAddress;
 };
 
@@ -77,6 +86,7 @@ struct systems
     SYS_STATUS LSM303;
     SYS_STATUS SHT31;
     SYS_STATUS VEML6030;
+    SYS_MODE MODE;
 };
 
 struct envData
@@ -121,15 +131,15 @@ public:
     void initWIFI(config config);
     void forceWIFI(config config);
     config initSPIFFS();
+    bool changeMode(config config, int wait = 5000);
 
     //Main
     void saveToSPIFFS(config data);
     void sendAuth(String address, AuthPackage auth, config config);
-    void sendData(String address, DataPackage data);
+    void sendData(String address, DataPackage data, config config);
     envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
-    bool changeMode(int wait = 5000);
 
     //Helping
     int64_t getTimestamp();
@@ -168,6 +178,7 @@ private:
     SYS_STATUS STATUS_LSM303 = UNMOUNTED;
     SYS_STATUS STATUS_SHT31 = UNMOUNTED;
     SYS_STATUS STATUS_VEML6030 = UNMOUNTED;
+    SYS_MODE STATUS_MODE = MONITOR;
 
     //Helper
     void loadBSECState();
