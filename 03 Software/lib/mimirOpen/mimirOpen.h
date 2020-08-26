@@ -6,12 +6,21 @@
 #include <SD.h>
 #include "time.h"
 #include <WiFiManager.h>
+#include <NeoPixelBus.h>
 
 #define addrSHT31D 0x45
 #define addrVEML6030 0x48
 #define addrCCS811 0x5A
 #define addrBME680 0x76
 #define addrCompas 0X0C
+
+#define BATTERY_PIN 12
+#define PIXEL_PIN 33
+#define PIXEL_PWR_PIN 32
+#define PIXEL_COUNT 5
+#define ENVIRO_PIN 25
+#define RADAR_PIN 27
+#define MONITOR_PIN 26
 
 enum SYS_STATUS
 {
@@ -20,6 +29,25 @@ enum SYS_STATUS
     ERROR_W = -1,
     UNMOUNTED = 0,
     OKAY = 1
+};
+
+enum BAT_STATUS
+{
+    CRITICAL_BATTERY,
+    LOW_BATTERY,
+    GOOD_BATTERY,
+    FULL_BATTERY,
+    CHARGING
+
+};
+
+enum SYS_PIXEL
+{
+    BATTERY,
+    MICROSD,
+    SENSORS,
+    SERVER,
+    WIFI
 };
 
 struct config
@@ -40,13 +68,13 @@ struct authType
 
 struct systems
 {
-    SYS_STATUS battery;
+    BAT_STATUS battery;
     int batteryPercent;
     SYS_STATUS wifi;
     SYS_STATUS sd;
     SYS_STATUS server;
     SYS_STATUS BME680;
-    SYS_STATUS COMPAS;
+    SYS_STATUS LSM303;
     SYS_STATUS SHT31;
     SYS_STATUS VEML6030;
 };
@@ -59,6 +87,7 @@ struct envData
     float altitude;
     float luminance;
     float iaq;
+    float iaqAccuracy;
     float eVOC;
     float eCO2;
     int bearing;
@@ -85,8 +114,9 @@ public:
     mimirOpen(int baudRate = 115200);
 
     //Init
-    void initPixels(int brightness = 64);
-    void initSensors();
+    void initPixels();
+
+    void initSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void initMicroSD(String filename = "/0000-00-00.txt");
     void initWIFI(config config);
     void forceWIFI(config config);
@@ -96,12 +126,20 @@ public:
     void saveToSPIFFS(config data);
     void sendAuth(String address, AuthPackage auth, config config);
     void sendData(String address, DataPackage data);
-    envData readSensors();
+    envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
+    bool changeMode(int wait = 5000);
 
     //Helping
+    int64_t getTimestamp();
+    bool checkBSECSensor();
+    void printBSECState(const char *name, const uint8_t *state);
+    float getBatteryVoltage();
+    int getBatteryPercent(float voltage);
     void printBootReason();
+    void pixelStatus(systems sys, int duration = 100);
+    void pixelSystemBusy(SYS_PIXEL system, RgbColor colour);
     String stringData(envData data, systems sys);
     systems getStatus();
     void WiFi_ON();
@@ -114,12 +152,6 @@ public:
     void testPixels(int repeat = 5, int _delay = 100);
 
 private:
-    String _IP_ADDRESS;
-    char _USER[40];
-    char _USER_ID[40];
-    char _DEVICE_ID[40];
-    char MIMIR_VERSION[10] = "P2005.2";
-
     String TimeStr, DateStr, ErrorMessage; // strings to hold time and date
     const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 
@@ -128,12 +160,12 @@ private:
     int wifi_signal;
     int batteryPercent;
 
-    SYS_STATUS STATUS_BATTERY = UNMOUNTED;
+    BAT_STATUS STATUS_BATTERY;
     SYS_STATUS STATUS_WIFI = UNMOUNTED;
     SYS_STATUS STATUS_SD = UNMOUNTED;
     SYS_STATUS STATUS_SERVER = UNMOUNTED;
     SYS_STATUS STATUS_BME680 = UNMOUNTED;
-    SYS_STATUS STATUS_COMPAS = UNMOUNTED;
+    SYS_STATUS STATUS_LSM303 = UNMOUNTED;
     SYS_STATUS STATUS_SHT31 = UNMOUNTED;
     SYS_STATUS STATUS_VEML6030 = UNMOUNTED;
 
@@ -141,8 +173,9 @@ private:
     void loadBSECState();
     void updateBSECState();
     void checkBSECStatus();
-    
-    int getBatteryPercent();
+    void turnOFFPixels();
+    RgbColor pixelSystemColour(SYS_STATUS stat);
+    RgbColor pixelBatteryColour(BAT_STATUS battery);
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
     String packageAuthJSON(AuthPackage auth);

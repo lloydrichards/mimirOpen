@@ -15,18 +15,19 @@ SPIClass spiSD(HSPI);
 #include <HTTPClient.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
+#include <NeoPixelBus.h>
 
-#include <NeoPixelBrightnessBus.h>
 #include "Adafruit_SHT31.h"                         //https://github.com/adafruit/Adafruit_SHT31
 #include "SparkFun_VEML6030_Ambient_Light_Sensor.h" //https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library
 #include "bsec.h"
-#include <HSCDTD008A.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_LIS2MDL.h>
 
 //Define Sensors
 Adafruit_SHT31 SHT31 = Adafruit_SHT31();
 SparkFun_Ambient_Light VEML6030(addrVEML6030);
 Bsec BME680;
-HSCDTD008A COMPAS(Wire, addrCompas);
+Adafruit_LIS2MDL LSM303 = Adafruit_LIS2MDL();
 
 //BME680 State
 const uint8_t bsec_config_iaq[] = {
@@ -40,35 +41,36 @@ float gain = .125;
 int integTime = 100;
 
 //Define Pixels
-#define PIXEL_PIN 19
-#define PIXEL_COUNT 5
+#define colorSaturation 128
 
-NeoPixelBrightnessBus<NeoGrbFeature, Neo800KbpsMethod> pixel(PIXEL_COUNT, PIXEL_PIN);
+NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> pixel(PIXEL_COUNT, PIXEL_PIN);
 
-RgbColor red(50, 0, 0);
-RgbColor green(0, 50, 0);
-RgbColor blue(0, 0, 50);
-RgbColor yellow(25, 25, 0);
-RgbColor purple(25, 0, 25);
-RgbColor lightBlue(0, 25, 25);
-RgbColor white(128);
+RgbColor red(colorSaturation, 0, 0);
+RgbColor yellow(64, 64, 0);
+RgbColor green(0, colorSaturation, 0);
+RgbColor teal(0, 64, 64);
+RgbColor blue(0, 0, colorSaturation);
+RgbColor violet(64, 0, 64);
+RgbColor white(colorSaturation);
 RgbColor black(0);
 
 mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
     StartTime = millis();
+    pinMode(MONITOR_PIN, INPUT_PULLUP);
+    pinMode(RADAR_PIN, INPUT_PULLUP);
+    pinMode(ENVIRO_PIN, INPUT_PULLUP);
 }
 
-void mimirOpen::initPixels(int brightness)
+void mimirOpen::initPixels()
 {
     Serial.println("Starting Pixels...");
     pixel.Begin();
     pixel.Show();
-    pixel.SetBrightness(brightness);
 }
 
-void mimirOpen::initSensors()
+void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
 {
     if (SHT31.begin(addrSHT31D))
     {
@@ -97,26 +99,34 @@ void mimirOpen::initSensors()
     BME680.begin(addrBME680, Wire);
     if (BME680.status == BSEC_OK)
     {
+
         BME680.setConfig(bsec_config_iaq);
-        loadBSECState();
+
         STATUS_BME680 = OKAY;
         Serial.println("BME680 Success!");
+        if (BSECTime)
+        {
+            BME680.setState(BSECState);
+        }
+        else
+        {
+            Serial.println("Saved state missing");
+        }
     }
     else
     {
         STATUS_BME680 = ERROR_L;
         Serial.println("BME680 Failed!");
     }
-    if (COMPAS.begin())
+    if (LSM303.begin())
     {
-        COMPAS.calibrate();
         Serial.println("Compass Success!");
-        STATUS_COMPAS = OKAY;
+        STATUS_LSM303 = OKAY;
     }
     else
     {
         Serial.println("Compass Failed!");
-        STATUS_COMPAS = ERROR_L;
+        STATUS_LSM303 = ERROR_L;
     }
 }
 
@@ -266,9 +276,10 @@ config mimirOpen::initSPIFFS()
 ///////////////////MAIN FUNCTIONS//////////////////
 ///////////////////////////////////////////////////
 
-envData mimirOpen::readSensors()
+envData mimirOpen::readSensors(uint8_t *BSECstate, int64_t &BSECTime)
 {
     envData data;
+    sensors_event_t event;
     bsec_virtual_sensor_t BME680Readings[10] = {
         BSEC_OUTPUT_RAW_TEMPERATURE,
         BSEC_OUTPUT_RAW_PRESSURE,
@@ -282,8 +293,16 @@ envData mimirOpen::readSensors()
         BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
     };
     BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_LP);
-    BME680.run() ? STATUS_BME680 = OKAY
-                 : STATUS_BME680 = ERROR_R;
+    if (BME680.run(getTimestamp()))
+    {
+        STATUS_BME680 = OKAY;
+        BSECTime = getTimestamp();
+        BME680.getState(BSECstate);
+    }
+    else
+    {
+        STATUS_BME680 = ERROR_R;
+    }
 
     float avgTemp = (SHT31.readTemperature() + BME680.temperature) / 2;
     float avgHumi = (SHT31.readHumidity() + BME680.humidity) / 2;
@@ -293,19 +312,13 @@ envData mimirOpen::readSensors()
     data.altitude = calcAltitude(BME680.pressure, avgTemp);
     data.luminance = (float)VEML6030.readLight();
     data.iaq = BME680.iaq;
+    data.iaqAccuracy = BME680.iaqAccuracy;
     data.eCO2 = BME680.co2Equivalent;
     data.eVOC = BME680.breathVocEquivalent;
 
-    updateBSECState();
-    if (COMPAS.measure())
-    {
-        data.bearing = ((atan2(COMPAS.y(), COMPAS.x())) * 180) / PI;
-        STATUS_COMPAS = OKAY;
-    }
-    else
-    {
-        STATUS_COMPAS = ERROR_R;
-    }
+    LSM303.getEvent(&event);
+    data.bearing = (atan2(event.magnetic.y, event.magnetic.x) * 180) / PI;
+
     return data;
 }
 
@@ -420,57 +433,155 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
     }
 }
 
+bool mimirOpen::changeMode(int wait)
+{
+    Serial.println("Starting Change Mode Wait...");
+    unsigned long currentMills = 0;
+    currentMills = millis();
+    bool nextTask = false;
+    while (!nextTask)
+    {
+        if (millis() > currentMills + wait)
+        {
+            Serial.println("Mode Change - Timed Out");
+            nextTask = true;
+        }
+        for (int i = 0; i < PIXEL_COUNT; i++)
+        {
+            pixel.SetPixelColor(i, teal);
+        }
+        pixel.Show();
+
+        if (digitalRead(ENVIRO_PIN) == LOW)
+        {
+            Serial.println("ENVIRO MODE Set!");
+            pixel.SetPixelColor(0, red);
+            pixel.SetPixelColor(1, red);
+            pixel.Show();
+            nextTask = true;
+        }
+        if (digitalRead(MONITOR_PIN) == LOW)
+        {
+            Serial.println("MONITOR MODE Set!");
+            pixel.SetPixelColor(1, red);
+            pixel.SetPixelColor(2, red);
+            pixel.SetPixelColor(3, red);
+            pixel.Show();
+            nextTask = true;
+        }
+        if (digitalRead(RADAR_PIN) == LOW)
+        {
+            Serial.println("RADAR MODE Set!");
+            pixel.SetPixelColor(3, red);
+            pixel.SetPixelColor(4, red);
+            pixel.Show();
+            nextTask = true;
+        }
+    }
+    return true;
+}
+
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
-void mimirOpen::loadBSECState()
+
+int64_t mimirOpen::getTimestamp()
 {
-    if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE)
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
+}
+bool mimirOpen::checkBSECSensor()
+{
+    if (BME680.status < BSEC_OK)
     {
-        // Existing state in EEPROM
-        Serial.println("Reading state from EEPROM");
-
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
-        {
-            bsecState[i] = EEPROM.read(i + 1);
-            Serial.println(bsecState[i], HEX);
-        }
-
-        BME680.setState(bsecState);
-        checkBSECStatus();
+        Serial.println("BSEC error, status %d!" + String(BME680.status));
+        return false;
     }
-    else
+    else if (BME680.status > BSEC_OK)
     {
-        // Erase the EEPROM with zeroes
-        Serial.println("Erasing EEPROM");
-
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE + 1; i++)
-            EEPROM.write(i, 0);
-
-        EEPROM.commit();
+        Serial.println("BSEC warning, status %d!" + String(BME680.status));
     }
+
+    if (BME680.bme680Status < BME680_OK)
+    {
+        Serial.println("Sensor error, bme680_status %d!" + String(BME680.bme680Status));
+        return false;
+    }
+    else if (BME680.bme680Status > BME680_OK)
+    {
+        Serial.println("Sensor warning, status %d!" + String(BME680.bme680Status));
+    }
+
+    return true;
 }
 
-void mimirOpen::updateBSECState()
+void mimirOpen::printBSECState(const char *name, const uint8_t *state)
 {
-    if (BME680.iaqAccuracy >= 3)
+    Serial.println(name);
+    for (int i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
     {
-        BME680.getState(bsecState);
-        checkBSECStatus();
-        Serial.println("Writing state to EEPROM");
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+        Serial.printf("%02x ", state[i]);
+        if (i % 16 == 15)
         {
-            EEPROM.write(i + 1, bsecState[i]);
-            Serial.println(bsecState[i], HEX);
+            Serial.print("\n");
         }
-        EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
-        EEPROM.commit();
     }
-    else
+    Serial.print("\n");
+}
+
+float mimirOpen::getBatteryVoltage()
+{
+    pinMode(BATTERY_PIN, INPUT);
+    long sum = 0;
+    float voltage = 0.0; // calculated voltage
+
+    float R1 = 100000.0; // resistance of R1 (1M)
+    float R2 = 100000.0; // resistance of R2 (1M)
+
+    for (int i = 0; i < 500; i++)
     {
-        Serial.println("BME680 not yet calibrated");
-        Serial.println("Current Accuracy:" + String(BME680.iaqAccuracy));
+        sum += analogRead(BATTERY_PIN);
+        delayMicroseconds(1000);
     }
+    // calculate the voltage
+    voltage = sum / (float)500;
+    voltage = (voltage * 1.98) / 4096.0 * 2.101; //for internal 1.1v reference
+                                                 // use if added divider circuit
+    //voltage = voltage / (R2 / (R1 + R2));
+    //round value by two precision
+    //voltage = roundf(voltage * 100) / 100;
+
+    return voltage;
+}
+
+int mimirOpen::getBatteryPercent(float volt)
+{
+    const float battery_max = 4.2; //maximum voltage of battery
+    const float battery_min = 3.0; //minimum voltage of battery before shutdown
+    batteryPercent = roundf(((volt - battery_min) / (battery_max - battery_min)) * 100);
+
+    if (batteryPercent < 10)
+    {
+        STATUS_BATTERY = CRITICAL_BATTERY;
+    }
+    else if (batteryPercent < 20)
+    {
+        STATUS_BATTERY = LOW_BATTERY;
+    }
+    else if (batteryPercent < 95)
+    {
+        STATUS_BATTERY = GOOD_BATTERY;
+    }
+    else if (batteryPercent < 100)
+    {
+        STATUS_BATTERY = FULL_BATTERY;
+    }
+    else if (batteryPercent >= 100)
+    {
+        STATUS_BATTERY = CHARGING;
+    }
+    return batteryPercent;
 }
 
 void mimirOpen::checkBSECStatus()
@@ -505,26 +616,75 @@ void mimirOpen::checkBSECStatus()
     BME680.status = BSEC_OK;
 }
 
-int mimirOpen::getBatteryPercent()
-{
-    int percent = 0;
-    return percent;
-};
-
 systems mimirOpen::getStatus()
 {
     systems current;
+    current.batteryPercent = getBatteryPercent(getBatteryVoltage());
     current.battery = STATUS_BATTERY;
-    current.batteryPercent = getBatteryPercent();
     current.sd = STATUS_SD;
     current.server = STATUS_SERVER;
     current.wifi = STATUS_WIFI;
     current.BME680 = STATUS_BME680;
-    current.COMPAS = STATUS_COMPAS;
+    current.LSM303 = STATUS_LSM303;
     current.SHT31 = STATUS_SHT31;
     current.VEML6030 = STATUS_VEML6030;
     return current;
 };
+
+void mimirOpen::pixelStatus(systems sys, int duration)
+{
+    pixel.SetPixelColor(0, pixelBatteryColour(sys.battery));
+    pixel.SetPixelColor(1, pixelSystemColour(sys.sd));
+    pixel.SetPixelColor(2, pixelSystemColour(sys.BME680));
+    pixel.SetPixelColor(3, pixelSystemColour(sys.server));
+    pixel.SetPixelColor(4, pixelSystemColour(sys.wifi));
+    pixel.Show();
+    delay(duration);
+    turnOFFPixels();
+}
+
+void mimirOpen::pixelSystemBusy(SYS_PIXEL system, RgbColor colour)
+{
+    pixel.SetPixelColor(system, colour);
+    pixel.Show();
+}
+
+RgbColor mimirOpen::pixelSystemColour(SYS_STATUS stat)
+{
+    switch (stat)
+    {
+    case ERROR_L:
+        return red;
+    case ERROR_R:
+        return red;
+    case ERROR_W:
+        return red;
+    case UNMOUNTED:
+        return black;
+    case OKAY:
+        return green;
+    default:
+        return black;
+    };
+}
+RgbColor mimirOpen::pixelBatteryColour(BAT_STATUS battery)
+{
+    switch (battery)
+    {
+    case CRITICAL_BATTERY:
+        return red;
+    case LOW_BATTERY:
+        return yellow;
+    case GOOD_BATTERY:
+        return green;
+    case FULL_BATTERY:
+        return green;
+    case CHARGING:
+        return blue;
+    default:
+        return black;
+    };
+}
 
 float mimirOpen::calcAltitude(float pressure, float temperature)
 {
@@ -587,7 +747,7 @@ void mimirOpen::logData(envData data, String filename)
     status.sd = STATUS_SD;
     status.server = STATUS_SERVER;
     status.BME680 = STATUS_BME680;
-    status.COMPAS = STATUS_COMPAS;
+    status.LSM303 = STATUS_LSM303;
     status.SHT31 = STATUS_SHT31;
     status.VEML6030 = STATUS_VEML6030;
 
@@ -635,7 +795,7 @@ String mimirOpen::packageJSON(DataPackage _data)
     status["sd"] = _data.status.sd;
     status["server"] = _data.status.server;
     status["BME680"] = _data.status.BME680;
-    status["COMPAS"] = _data.status.COMPAS;
+    status["LSM303"] = _data.status.LSM303;
     status["SHT31"] = _data.status.SHT31;
     status["VEML6030"] = _data.status.VEML6030;
 
@@ -647,6 +807,7 @@ String mimirOpen::packageJSON(DataPackage _data)
     data["altitude"] = _data.data.altitude;
     data["luminance"] = _data.data.luminance;
     data["iaq"] = _data.data.iaq;
+    data["iaqAccuracy"] = _data.data.iaqAccuracy;
     data["eVOC"] = _data.data.eVOC;
     data["eCO2"] = _data.data.eCO2;
     data["bearing"] = _data.data.bearing;
@@ -671,7 +832,7 @@ String mimirOpen::stringData(envData data, systems status)
            "," +
            status.BME680 +
            "," +
-           status.COMPAS +
+           status.LSM303 +
            "," +
            status.SHT31 +
            "," +
@@ -689,6 +850,8 @@ String mimirOpen::stringData(envData data, systems status)
            "," +
            data.iaq +
            "," +
+           data.iaqAccuracy +
+           "," +
            data.eVOC +
            "," +
            data.eCO2 +
@@ -698,7 +861,7 @@ String mimirOpen::stringData(envData data, systems status)
 
 String mimirOpen::header()
 {
-    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,eVOC,eCO2,bearing\r\n";
+    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,iaqAccuracy,eVOC,eCO2,bearing\r\n";
     return output;
 }
 
@@ -730,18 +893,18 @@ void mimirOpen::WiFi_OFF()
 void mimirOpen::SLEEP(long interval)
 {
     //CONFIG Sleep Pin
-    //Serial.println("Config Sleep Pin");
-    // gpio_pullup_en(GPIO_NUM_32);    // use pullup on GPIO
-    // gpio_pullup_en(GPIO_NUM_33);    // use pullup on GPIO
-    // gpio_pulldown_dis(GPIO_NUM_32); // not use pulldown on GPIO
-    // gpio_pulldown_dis(GPIO_NUM_33); // not use pulldown on GPIO
+    Serial.println("Config Sleep Pin");
+    gpio_pullup_en(GPIO_NUM_26);    // use pullup on GPIO
+    gpio_pulldown_dis(GPIO_NUM_26); // not use pulldown on GPIO
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
 
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 
     //CONFIG Sleep Timer
-    Serial.println("Config Sleep Timer");                                                 // Wake if GPIO is low
+    Serial.println("Config Sleep Timer");                                            // Wake if GPIO is low
     long SleepTimer = (interval * 60 - ((CurrentMin % interval) * 60 + CurrentSec)); //Some ESP32 are too fast to maintain accurate time
     esp_sleep_enable_timer_wakeup(SleepTimer * 1000000LL);
+    turnOFFPixels();
 
     Serial.println("Entering " + String(SleepTimer) + "-secs of sleep time");
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
@@ -857,6 +1020,15 @@ void mimirOpen::printBootReason()
         }
     }
 }
+
+void mimirOpen::turnOFFPixels()
+{
+    for (int i = 0; i < PIXEL_COUNT; i++)
+    {
+        pixel.SetPixelColor(i, black);
+    }
+    pixel.Show();
+}
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
@@ -901,7 +1073,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, red);
         pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
@@ -909,7 +1081,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, green);
         pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
@@ -917,31 +1089,7 @@ void mimirOpen::testPixels(int repeat, int _delay)
     {
         pixel.SetPixelColor(i, blue);
         pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, yellow);
-        pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, purple);
-        pixel.Show();
-        delay(500);
-        pixel.SetPixelColor(i, black);
-        pixel.Show();
-    }
-    for (int i = 0; i < PIXEL_COUNT; i++)
-    {
-        pixel.SetPixelColor(i, lightBlue);
-        pixel.Show();
-        delay(500);
+        delay(_delay);
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
