@@ -26,9 +26,22 @@ RTC_DATA_ATTR int64_t BSECTime = 0;
 
 void setup()
 {
+    ///////////////////////////////////////////////////
+    //////////////////////STARTUP//////////////////////
+    ///////////////////////////////////////////////////
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     mimir.printBootReason();
     config config = mimir.initSPIFFS();
+    mimir.initMicroSD("/testing.txt");
+    mimir.initSensors(BSECState, BSECTime);
+    envData data = mimir.readSensors(BSECState, BSECTime);
+    mimir.checkBSECSensor();
+    mimir.printSensors(data);
+    mimir.logData(data, "/testing.txt");
+
+    ///////////////////////////////////////////////////
+    /////////////////////MODE CHANGE///////////////////
+    ///////////////////////////////////////////////////
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0)
     {
         Serial.println("\nMonitor Button was pressed!");
@@ -36,12 +49,18 @@ void setup()
         mimir.changeMode(8000);
     }
 
+    ///////////////////////////////////////////////////
+    /////////////////////FORCED MODE///////////////////
+    ///////////////////////////////////////////////////
     if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(RADAR_PIN) == LOW)
     {
         Serial.println("\nEntering Forced Mode");
         mimir.forceWIFI(config);
     }
 
+    ///////////////////////////////////////////////////
+    ///////////////////////ON BOOT/////////////////////
+    ///////////////////////////////////////////////////
     if (bootCount == 0)
     {
         mimir.i2cScanner();
@@ -57,17 +76,9 @@ void setup()
         // mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, config);
         // mimir.WiFi_OFF();
     }
-    mimir.initMicroSD("/testing.txt");
-    mimir.initSensors(BSECState, BSECTime);
-
-    // Serial.println("RESETTING WIFI");
-    //
-    // delay(1000);
-
-    envData data = mimir.readSensors(BSECState, BSECTime);
-    mimir.checkBSECSensor();
-    mimir.printSensors(data);
-    mimir.logData(data, "/testing.txt");
+    ///////////////////////////////////////////////////
+    //////////////////////SEND DATA////////////////////
+    ///////////////////////////////////////////////////
     if (bootCount % 3 == 0)
     {
         sendData.auth.deviceId = config.deviceId;
@@ -86,6 +97,9 @@ void setup()
         // mimir.WiFi_OFF();
         // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
     }
+    ///////////////////////////////////////////////////
+    /////////////////////SLEEP TIME////////////////////
+    ///////////////////////////////////////////////////
     mimir.saveToSPIFFS(config);
     mimir.printBSECState("Current State", BSECState);
     Serial.print("Boot Count: ");
