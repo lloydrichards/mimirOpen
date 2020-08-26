@@ -58,6 +58,9 @@ mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
     StartTime = millis();
+    pinMode(MONITOR_PIN, INPUT_PULLUP);
+    pinMode(RADAR_PIN, INPUT_PULLUP);
+    pinMode(ENVIRO_PIN, INPUT_PULLUP);
 }
 
 void mimirOpen::initPixels()
@@ -67,7 +70,7 @@ void mimirOpen::initPixels()
     pixel.Show();
 }
 
-void mimirOpen::initSensors()
+void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
 {
     if (SHT31.begin(addrSHT31D))
     {
@@ -96,10 +99,19 @@ void mimirOpen::initSensors()
     BME680.begin(addrBME680, Wire);
     if (BME680.status == BSEC_OK)
     {
+
         BME680.setConfig(bsec_config_iaq);
-        loadBSECState();
+
         STATUS_BME680 = OKAY;
         Serial.println("BME680 Success!");
+        if (BSECTime)
+        {
+            BME680.setState(BSECState);
+        }
+        else
+        {
+            Serial.println("Saved state missing");
+        }
     }
     else
     {
@@ -264,7 +276,7 @@ config mimirOpen::initSPIFFS()
 ///////////////////MAIN FUNCTIONS//////////////////
 ///////////////////////////////////////////////////
 
-envData mimirOpen::readSensors()
+envData mimirOpen::readSensors(uint8_t *BSECstate, int64_t &BSECTime)
 {
     envData data;
     sensors_event_t event;
@@ -281,8 +293,16 @@ envData mimirOpen::readSensors()
         BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
     };
     BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_LP);
-    BME680.run() ? STATUS_BME680 = OKAY
-                 : STATUS_BME680 = ERROR_R;
+    if (BME680.run(getTimestamp()))
+    {
+        STATUS_BME680 = OKAY;
+        BSECTime = getTimestamp();
+        BME680.getState(BSECstate);
+    }
+    else
+    {
+        STATUS_BME680 = ERROR_R;
+    }
 
     float avgTemp = (SHT31.readTemperature() + BME680.temperature) / 2;
     float avgHumi = (SHT31.readHumidity() + BME680.humidity) / 2;
@@ -296,7 +316,6 @@ envData mimirOpen::readSensors()
     data.eCO2 = BME680.co2Equivalent;
     data.eVOC = BME680.breathVocEquivalent;
 
-    updateBSECState();
     LSM303.getEvent(&event);
     data.bearing = (atan2(event.magnetic.y, event.magnetic.x) * 180) / PI;
 
@@ -414,9 +433,102 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
     }
 }
 
+bool mimirOpen::changeMode(int wait)
+{
+    Serial.println("Starting Change Mode Wait...");
+    unsigned long currentMills = 0;
+    currentMills = millis();
+    bool nextTask = false;
+    while (!nextTask)
+    {
+        if (millis() > currentMills + wait)
+        {
+            Serial.println("Mode Change - Timed Out");
+            nextTask = true;
+        }
+        for (int i = 0; i < PIXEL_COUNT; i++)
+        {
+            pixel.SetPixelColor(i, teal);
+        }
+        pixel.Show();
+
+        if (digitalRead(ENVIRO_PIN) == LOW)
+        {
+            Serial.println("ENVIRO MODE Set!");
+            pixel.SetPixelColor(0, red);
+            pixel.SetPixelColor(1, red);
+            pixel.Show();
+            nextTask = true;
+        }
+        if (digitalRead(MONITOR_PIN) == LOW)
+        {
+            Serial.println("MONITOR MODE Set!");
+            pixel.SetPixelColor(1, red);
+            pixel.SetPixelColor(2, red);
+            pixel.SetPixelColor(3, red);
+            pixel.Show();
+            nextTask = true;
+        }
+        if (digitalRead(RADAR_PIN) == LOW)
+        {
+            Serial.println("RADAR MODE Set!");
+            pixel.SetPixelColor(3, red);
+            pixel.SetPixelColor(4, red);
+            pixel.Show();
+            nextTask = true;
+        }
+    }
+    return true;
+}
+
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+
+int64_t mimirOpen::getTimestamp()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
+}
+bool mimirOpen::checkBSECSensor()
+{
+    if (BME680.status < BSEC_OK)
+    {
+        Serial.println("BSEC error, status %d!" + String(BME680.status));
+        return false;
+    }
+    else if (BME680.status > BSEC_OK)
+    {
+        Serial.println("BSEC warning, status %d!" + String(BME680.status));
+    }
+
+    if (BME680.bme680Status < BME680_OK)
+    {
+        Serial.println("Sensor error, bme680_status %d!" + String(BME680.bme680Status));
+        return false;
+    }
+    else if (BME680.bme680Status > BME680_OK)
+    {
+        Serial.println("Sensor warning, status %d!" + String(BME680.bme680Status));
+    }
+
+    return true;
+}
+
+void mimirOpen::printBSECState(const char *name, const uint8_t *state)
+{
+    Serial.println(name);
+    for (int i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+    {
+        Serial.printf("%02x ", state[i]);
+        if (i % 16 == 15)
+        {
+            Serial.print("\n");
+        }
+    }
+    Serial.print("\n");
+}
 
 float mimirOpen::getBatteryVoltage()
 {
@@ -470,55 +582,6 @@ int mimirOpen::getBatteryPercent(float volt)
         STATUS_BATTERY = CHARGING;
     }
     return batteryPercent;
-}
-void mimirOpen::loadBSECState()
-{
-    if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE)
-    {
-        // Existing state in EEPROM
-        Serial.println("Reading state from EEPROM");
-
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
-        {
-            bsecState[i] = EEPROM.read(i + 1);
-            Serial.println(bsecState[i], HEX);
-        }
-
-        BME680.setState(bsecState);
-        checkBSECStatus();
-    }
-    else
-    {
-        // Erase the EEPROM with zeroes
-        Serial.println("Erasing EEPROM");
-
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE + 1; i++)
-            EEPROM.write(i, 0);
-
-        EEPROM.commit();
-    }
-}
-
-void mimirOpen::updateBSECState()
-{
-    if (BME680.iaqAccuracy >= 3)
-    {
-        BME680.getState(bsecState);
-        checkBSECStatus();
-        Serial.println("Writing state to EEPROM");
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
-        {
-            EEPROM.write(i + 1, bsecState[i]);
-            Serial.println(bsecState[i], HEX);
-        }
-        EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
-        EEPROM.commit();
-    }
-    else
-    {
-        Serial.println("BME680 not yet calibrated");
-        Serial.println("Current Accuracy:" + String(BME680.iaqAccuracy));
-    }
 }
 
 void mimirOpen::checkBSECStatus()
@@ -833,8 +896,7 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Config Sleep Pin");
     gpio_pullup_en(GPIO_NUM_26);    // use pullup on GPIO
     gpio_pulldown_dis(GPIO_NUM_26); // not use pulldown on GPIO
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26,LOW);
-    Serial.println("Wake Pin: " + MONITOR_PIN);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
 
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
 

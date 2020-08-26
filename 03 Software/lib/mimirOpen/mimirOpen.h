@@ -116,7 +116,7 @@ public:
     //Init
     void initPixels();
 
-    void initSensors();
+    void initSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void initMicroSD(String filename = "/0000-00-00.txt");
     void initWIFI(config config);
     void forceWIFI(config config);
@@ -126,11 +126,15 @@ public:
     void saveToSPIFFS(config data);
     void sendAuth(String address, AuthPackage auth, config config);
     void sendData(String address, DataPackage data);
-    envData readSensors();
+    envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
+    bool changeMode(int wait = 5000);
 
     //Helping
+    int64_t getTimestamp();
+    bool checkBSECSensor();
+    void printBSECState(const char *name, const uint8_t *state);
     float getBatteryVoltage();
     int getBatteryPercent(float voltage);
     void printBootReason();
