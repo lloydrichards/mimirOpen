@@ -32,6 +32,7 @@ void setup()
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     mimir.printBootReason();
     config config = mimir.initSPIFFS();
+    config.serialNumber = "m3wjc22wyh88";
     mimir.initMicroSD("/testing.txt");
     mimir.initSensors(BSECState, BSECTime);
     envData data = mimir.readSensors(BSECState, BSECTime);
@@ -46,7 +47,7 @@ void setup()
     {
         Serial.println("\nMonitor Button was pressed!");
         mimir.initPixels();
-        mimir.changeMode(config, 8000);
+        mimir.changeMode(&config, 8000);
     }
 
     ///////////////////////////////////////////////////
@@ -55,7 +56,7 @@ void setup()
     if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(RADAR_PIN) == LOW)
     {
         Serial.println("\nEntering Forced Mode");
-        mimir.forceWIFI(config);
+        mimir.forceWIFI(&config);
     }
 
     ///////////////////////////////////////////////////
@@ -63,18 +64,13 @@ void setup()
     ///////////////////////////////////////////////////
     if (bootCount == 0)
     {
-        mimir.i2cScanner();
-        config.email = "tester@word.com";
-        config.serialNumber = "wthsfty5vgu";
-        config.deviceName = "Test";
-
-        // mimir.initWIFI(config);
-        // sendAuth.email = config.email;
-        // sendAuth.serialNumber = config.serialNumber;
-        // sendAuth.macAddress = WiFi.macAddress();
-        // mimir.WiFi_ON();
-        // mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, config);
-        // mimir.WiFi_OFF();
+        mimir.initWIFI(&config);
+        sendAuth.email = config.email;
+        sendAuth.serialNumber = config.serialNumber;
+        sendAuth.macAddress = WiFi.macAddress();
+        mimir.WiFi_ON();
+        mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config);
+        mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////
     //////////////////////SEND DATA////////////////////
@@ -83,6 +79,7 @@ void setup()
     {
         sendData.auth.deviceId = config.deviceId;
         sendData.auth.userId = config.userId;
+        sendData.auth.serialNumber = config.serialNumber;
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
@@ -90,17 +87,18 @@ void setup()
         mimir.initPixels();
         mimir.testPixels(1, 100);
         //Everything that happens with the server happens in here
-        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-        // delay(500);
-        // mimir.WiFi_ON();
-        // mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData);
-        // mimir.WiFi_OFF();
-        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+        delay(500);
+        mimir.WiFi_ON();
+        mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
+        mimir.WiFi_OFF();
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
     }
     ///////////////////////////////////////////////////
     /////////////////////SLEEP TIME////////////////////
     ///////////////////////////////////////////////////
 
+    mimir.saveToSPIFFS(config);
     mimir.printBSECState("Current State", BSECState);
     Serial.print("Boot Count: ");
     Serial.println(bootCount);

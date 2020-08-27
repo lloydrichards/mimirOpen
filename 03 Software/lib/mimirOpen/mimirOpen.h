@@ -128,15 +128,16 @@ public:
 
     void initSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void initMicroSD(String filename = "/0000-00-00.txt");
-    void initWIFI(config config);
-    void forceWIFI(config config);
+    void initWIFI(config *config);
+    void forceWIFI(config *config);
     config initSPIFFS();
-    bool changeMode(config config, int wait = 5000);
+    bool changeMode(config *config, int wait = 5000);
 
     //Main
+    config updateConfig();
     void saveToSPIFFS(config data);
-    void sendAuth(String address, AuthPackage auth, config config);
-    void sendData(String address, DataPackage data, config config);
+    void sendAuth(String address, AuthPackage auth, config *config);
+    void sendData(String address, DataPackage data, config *config);
     envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");

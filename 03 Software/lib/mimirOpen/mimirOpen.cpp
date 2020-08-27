@@ -35,6 +35,18 @@ const uint8_t bsec_config_iaq[] = {
 };
 uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 uint16_t stateUpdateCounter = 0;
+bsec_virtual_sensor_t BME680Readings[10] = {
+    BSEC_OUTPUT_RAW_TEMPERATURE,
+    BSEC_OUTPUT_RAW_PRESSURE,
+    BSEC_OUTPUT_RAW_HUMIDITY,
+    BSEC_OUTPUT_RAW_GAS,
+    BSEC_OUTPUT_IAQ,
+    BSEC_OUTPUT_STATIC_IAQ,
+    BSEC_OUTPUT_CO2_EQUIVALENT,
+    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+};
 
 //VEML6030 settings
 float gain = .125;
@@ -101,7 +113,6 @@ void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
     {
 
         BME680.setConfig(bsec_config_iaq);
-
         STATUS_BME680 = OKAY;
         Serial.println("BME680 Success!");
         if (BSECTime)
@@ -112,6 +123,7 @@ void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
         {
             Serial.println("Saved state missing");
         }
+        BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_ULP);
     }
     else
     {
@@ -154,13 +166,11 @@ void mimirOpen::initMicroSD(String filename)
     }
     file.close();
 }
-void mimirOpen::initWIFI(config _config)
+void mimirOpen::initWIFI(config *config)
 {
-    config newConfig = _config;
-
-    WiFiManagerParameter custom_EMAIL("Email", "Email", _config.email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", _config.serialNumber.c_str(), 12, " data-mask='____-____-____'");
-    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", _config.deviceName.c_str(), 40);
+    WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
 
@@ -183,23 +193,18 @@ void mimirOpen::initWIFI(config _config)
         SetupTime();
     }
     //Update Device Info with Params
-    newConfig.email = custom_EMAIL.getValue();
-    newConfig.serialNumber = custom_SERIAL_NUMBER.getValue();
-    newConfig.deviceName = custom_DEVICE_NAME.getValue();
-    newConfig.deviceId = _config.deviceId;
-    newConfig.userId = _config.userId;
+    config->email = custom_EMAIL.getValue();
+    config->serialNumber = custom_SERIAL_NUMBER.getValue();
+    config->deviceName = custom_DEVICE_NAME.getValue();
 
-    saveToSPIFFS(newConfig);
     WiFi_OFF();
 }
 
-void mimirOpen::forceWIFI(config _config)
+void mimirOpen::forceWIFI(config *config)
 {
-    config newConfig = _config;
-
-    WiFiManagerParameter custom_EMAIL("Email", "Email", _config.email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", _config.serialNumber.c_str(), 12, " data-mask='____-____-____'");
-    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", _config.deviceName.c_str(), 40);
+    WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
 
@@ -228,11 +233,10 @@ void mimirOpen::forceWIFI(config _config)
         SetupTime();
     }
     //Update Device Info with Params
-    newConfig.email = custom_EMAIL.getValue();
-    newConfig.serialNumber = custom_SERIAL_NUMBER.getValue();
-    newConfig.deviceName = custom_DEVICE_NAME.getValue();
+    config->email = custom_EMAIL.getValue();
+    config->serialNumber = custom_SERIAL_NUMBER.getValue();
+    config->deviceName = custom_DEVICE_NAME.getValue();
 
-    saveToSPIFFS(newConfig);
     WiFi_OFF();
 }
 
@@ -276,6 +280,7 @@ config mimirOpen::initSPIFFS()
             {
                 Serial.println("failed to load json config");
             }
+            configFile.close();
         }
     }
     else
@@ -289,23 +294,54 @@ config mimirOpen::initSPIFFS()
 ///////////////////MAIN FUNCTIONS//////////////////
 ///////////////////////////////////////////////////
 
+config mimirOpen::updateConfig()
+{
+    config newConfig;
+    Serial.println("Updating Config...");
+    if (SPIFFS.exists("/config.json"))
+    {
+        //file exists, reading and loading
+        Serial.println("reading config file");
+        fs::File configFile = SPIFFS.open("/config.json", "r");
+        if (configFile)
+        {
+            Serial.println("opened config file");
+            size_t size = configFile.size();
+            // Allocate a buffer to store contents of the file.
+            std::unique_ptr<char[]> buf(new char[size]);
+
+            configFile.readBytes(buf.get(), size);
+            DynamicJsonDocument configJson(1024);
+            DeserializationError error = deserializeJson(configJson, buf.get());
+            if (error)
+            {
+                Serial.println("ERROR load json config");
+                return newConfig;
+            }
+            Serial.println("\nparsed json");
+            serializeJsonPretty(configJson, Serial);
+
+            newConfig.email = configJson["email"].as<String>();
+            newConfig.serialNumber = configJson["serialNumber"].as<String>();
+            newConfig.deviceName = configJson["deviceName"].as<String>();
+            newConfig.userId = configJson["userId"].as<String>();
+            newConfig.deviceId = configJson["deviceId"].as<String>();
+            newConfig.mode = configJson["mode"].as<int>();
+        }
+        else
+        {
+            Serial.println("failed to load json config");
+        }
+        configFile.close();
+    }
+    return newConfig;
+}
+
 envData mimirOpen::readSensors(uint8_t *BSECstate, int64_t &BSECTime)
 {
     envData data;
     sensors_event_t event;
-    bsec_virtual_sensor_t BME680Readings[10] = {
-        BSEC_OUTPUT_RAW_TEMPERATURE,
-        BSEC_OUTPUT_RAW_PRESSURE,
-        BSEC_OUTPUT_RAW_HUMIDITY,
-        BSEC_OUTPUT_RAW_GAS,
-        BSEC_OUTPUT_IAQ,
-        BSEC_OUTPUT_STATIC_IAQ,
-        BSEC_OUTPUT_CO2_EQUIVALENT,
-        BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
-        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-    };
-    BME680.updateSubscription(BME680Readings, 10, BSEC_SAMPLE_RATE_LP);
+
     if (BME680.run(getTimestamp()))
     {
         STATUS_BME680 = OKAY;
@@ -382,9 +418,8 @@ void mimirOpen::printSensors(envData data)
     Serial.println(data.bearing);
 }
 
-void mimirOpen::sendData(String address, DataPackage data, config _config)
+void mimirOpen::sendData(String address, DataPackage data, config *config)
 {
-    config newConfig = _config;
     if ((WiFi.status() == WL_CONNECTED))
     {
         Serial.println("Sending Data...");
@@ -411,11 +446,9 @@ void mimirOpen::sendData(String address, DataPackage data, config _config)
             Serial.print("Received Mode: ");
             Serial.println(receivedMode);
 
-            newConfig.userId = userId;
-            newConfig.deviceId = deviceId;
-            newConfig.mode = receivedMode;
-
-            saveToSPIFFS(newConfig);
+            config->userId = userId;
+            config->deviceId = deviceId;
+            config->mode = receivedMode;
         }
         else
         {
@@ -426,10 +459,8 @@ void mimirOpen::sendData(String address, DataPackage data, config _config)
     }
 }
 
-void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
+void mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
 {
-    config newConfig = _config;
-
     if ((WiFi.status() == WL_CONNECTED))
     {
         Serial.println("Sending Auth...");
@@ -456,11 +487,9 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
             Serial.print("Received Mode: ");
             Serial.println(receivedMode);
 
-            newConfig.userId = userId;
-            newConfig.deviceId = deviceId;
-            newConfig.mode = receivedMode;
-
-            saveToSPIFFS(newConfig);
+            config->userId = userId;
+            config->deviceId = deviceId;
+            config->mode = receivedMode;
         }
         else
         {
@@ -471,9 +500,8 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config _config)
     }
 }
 
-bool mimirOpen::changeMode(config _config, int wait)
+bool mimirOpen::changeMode(config *config, int wait)
 {
-    config newConfig = _config;
     Serial.println("Starting Change Mode Wait...");
     unsigned long currentMills = 0;
     currentMills = millis();
@@ -497,8 +525,7 @@ bool mimirOpen::changeMode(config _config, int wait)
             pixel.SetPixelColor(0, red);
             pixel.SetPixelColor(1, red);
             pixel.Show();
-            newConfig.mode = 0;
-            saveToSPIFFS(newConfig);
+            config->mode = 0;
             nextTask = true;
         }
         if (digitalRead(MONITOR_PIN) == LOW)
@@ -508,8 +535,7 @@ bool mimirOpen::changeMode(config _config, int wait)
             pixel.SetPixelColor(2, red);
             pixel.SetPixelColor(3, red);
             pixel.Show();
-            newConfig.mode = 1;
-            saveToSPIFFS(newConfig);
+            config->mode = 1;
             nextTask = true;
         }
         if (digitalRead(RADAR_PIN) == LOW)
@@ -518,8 +544,7 @@ bool mimirOpen::changeMode(config _config, int wait)
             pixel.SetPixelColor(3, red);
             pixel.SetPixelColor(4, red);
             pixel.Show();
-            newConfig.mode = 2;
-            saveToSPIFFS(newConfig);
+            config->mode = 2;
             nextTask = true;
         }
     }
