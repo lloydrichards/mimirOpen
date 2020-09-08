@@ -32,11 +32,10 @@ void setup()
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     mimir.printBootReason();
     config config = mimir.initSPIFFS();
-    config.serialNumber = "m3wjc22wyh88";
+    mimir.initPixels();
     mimir.initMicroSD("/testing.txt");
     mimir.initSensors(BSECState, BSECTime);
     envData data = mimir.readSensors(BSECState, BSECTime);
-    mimir.checkBSECSensor();
     mimir.printSensors(data);
     mimir.logData(data, "/testing.txt");
 
@@ -46,7 +45,6 @@ void setup()
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0)
     {
         Serial.println("\nMonitor Button was pressed!");
-        mimir.initPixels();
         mimir.changeMode(&config, 8000);
     }
 
@@ -64,6 +62,7 @@ void setup()
     ///////////////////////////////////////////////////
     if (bootCount == 0)
     {
+        mimir.testPixels(1);
         mimir.initWIFI(&config);
         sendAuth.email = config.email;
         sendAuth.serialNumber = config.serialNumber;
@@ -83,9 +82,6 @@ void setup()
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
-
-        mimir.initPixels();
-        mimir.testPixels(1, 100);
         //Everything that happens with the server happens in here
         WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
         delay(500);
@@ -99,7 +95,6 @@ void setup()
     ///////////////////////////////////////////////////
 
     mimir.saveToSPIFFS(config);
-    mimir.printBSECState("Current State", BSECState);
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;
