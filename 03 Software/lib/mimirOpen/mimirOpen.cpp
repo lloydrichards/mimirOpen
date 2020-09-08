@@ -6,6 +6,7 @@
 #include <SD.h>
 #include "time.h"
 #include <EEPROM.h>
+#include "driver/adc.h"
 
 SPIClass spiSD(HSPI);
 
@@ -70,6 +71,7 @@ mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
     StartTime = millis();
+    adc_power_on();
     pinMode(MONITOR_PIN, INPUT_PULLUP);
     pinMode(RADAR_PIN, INPUT_PULLUP);
     pinMode(ENVIRO_PIN, INPUT_PULLUP);
@@ -984,7 +986,8 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
     Serial.println("Starting deep-sleep...");
 
-    delay(100);
+    adc_power_off();
+    esp_wifi_stop();
     esp_deep_sleep_start();
 }
 
