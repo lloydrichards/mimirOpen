@@ -71,7 +71,6 @@ mimirOpen::mimirOpen(int baudRate)
 {
     Serial.begin(baudRate);
     StartTime = millis();
-    adc_power_on();
     pinMode(MONITOR_PIN, INPUT_PULLUP);
     pinMode(RADAR_PIN, INPUT_PULLUP);
     pinMode(ENVIRO_PIN, INPUT_PULLUP);
@@ -171,7 +170,7 @@ void mimirOpen::initMicroSD(String filename)
 void mimirOpen::initWIFI(config *config)
 {
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -205,7 +204,7 @@ void mimirOpen::initWIFI(config *config)
 void mimirOpen::forceWIFI(config *config)
 {
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -986,8 +985,9 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
     Serial.println("Starting deep-sleep...");
 
-    adc_power_off();
-    esp_wifi_stop();
+    // adc_power_off();
+    // esp_wifi_stop();
+    delay(100);
     esp_deep_sleep_start();
 }
 
