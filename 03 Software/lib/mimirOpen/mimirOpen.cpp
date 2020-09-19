@@ -617,9 +617,9 @@ float mimirOpen::getBatteryVoltage()
     }
     // calculate the voltage
     voltage = sum / (float)500;
-    voltage = (voltage * 1.98) / 4096.0 * 2.101; //for internal 1.1v reference
-                                                 // use if added divider circuit
-    //voltage = voltage / (R2 / (R1 + R2));
+    voltage = (voltage * 3.3) / 4096.0 * 1.115; //for internal 1.1v reference
+                                                // use if added divider circuit
+    voltage = voltage / (R2 / (R1 + R2));
     //round value by two precision
     //voltage = roundf(voltage * 100) / 100;
 

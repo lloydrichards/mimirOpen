@@ -14,7 +14,7 @@
 #define addrBME680 0x76
 #define addrCompas 0X0C
 
-#define BATTERY_PIN 12
+#define BATTERY_PIN 34
 #define PIXEL_PIN 33
 #define PIXEL_PWR_PIN 32
 #define PIXEL_COUNT 5
