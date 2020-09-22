@@ -7,6 +7,8 @@
 #include "time.h"
 #include <EEPROM.h>
 #include "driver/adc.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 SPIClass spiSD(HSPI);
 
@@ -69,6 +71,7 @@ RgbColor black(0);
 
 mimirOpen::mimirOpen(int baudRate)
 {
+    adc_power_on();
     Serial.begin(baudRate);
     StartTime = millis();
     pinMode(MONITOR_PIN, INPUT_PULLUP);
@@ -610,13 +613,13 @@ float mimirOpen::getBatteryVoltage()
     float R1 = 100000.0; // resistance of R1 (1M)
     float R2 = 100000.0; // resistance of R2 (1M)
 
-    for (int i = 0; i < 500; i++)
+    for (int i = 0; i < 100; i++)
     {
         sum += analogRead(BATTERY_PIN);
         delayMicroseconds(1000);
     }
     // calculate the voltage
-    voltage = sum / (float)500;
+    voltage = sum / (float)100;
     voltage = (voltage * 3.3) / 4096.0 * 1.115; //for internal 1.1v reference
                                                 // use if added divider circuit
     voltage = voltage / (R2 / (R1 + R2));
@@ -961,7 +964,7 @@ void mimirOpen::WiFi_ON()
 };
 void mimirOpen::WiFi_OFF()
 {
-    WiFi.disconnect();
+    WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 };
 
@@ -974,6 +977,18 @@ void mimirOpen::SLEEP(long interval)
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
 
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
+    if ((WiFi.status() == WL_CONNECTED))
+    {
+        Serial.println("Turning off Wifi Stuff...");
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    }
+
+    Serial.println("Turning off Bluetooth Stuff...");
+    btStop();
+    esp_bt_controller_disable();
+    Serial.println("Turning off ADC Stuff...");
+    adc_power_off();
 
     //CONFIG Sleep Timer
     Serial.println("Config Sleep Timer");                                            // Wake if GPIO is low
@@ -985,8 +1000,6 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
     Serial.println("Starting deep-sleep...");
 
-    // adc_power_off();
-    // esp_wifi_stop();
     delay(100);
     esp_deep_sleep_start();
 }

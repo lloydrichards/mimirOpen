@@ -37,7 +37,7 @@ void setup()
     mimir.initSensors(BSECState, BSECTime);
     envData data = mimir.readSensors(BSECState, BSECTime);
     mimir.printSensors(data);
-    mimir.logData(data, "/testing.txt");
+    
 
     ///////////////////////////////////////////////////
     /////////////////////MODE CHANGE///////////////////
@@ -82,13 +82,14 @@ void setup()
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
+        mimir.logData(data, "/testing.txt");
         //Everything that happens with the server happens in here
-        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-        delay(500);
+        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+        // delay(500);
         mimir.WiFi_ON();
         mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
         mimir.WiFi_OFF();
-        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
+        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
     }
     ///////////////////////////////////////////////////
     /////////////////////SLEEP TIME////////////////////
