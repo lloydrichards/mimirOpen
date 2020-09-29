@@ -60,7 +60,7 @@ void setup()
     if (bootCount == 0)
     {
         mimir.pixelBootUp();
-        mimir.pixelSystemStatus(BATTERY, RgbColor(128 * (BatPercent / 100), 128 * (BatPercent / 100), 0));
+        mimir.pixelSystemStatus(BATTERY, RgbColor(map(BatPercent, 0, 100, 128, 0), map(BatPercent, 0, 100, 0, 128), 0));
         mimir.initMicroSD("/testing.txt") ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
         mimir.initSensors(BSECState, BSECTime) ? mimir.pixelSystemStatus(SENSORS, GREEN) : mimir.pixelSystemStatus(SENSORS, RED);
     }
