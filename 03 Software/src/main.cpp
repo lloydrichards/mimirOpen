@@ -97,17 +97,36 @@ void setup()
     if (bootCount == 0)
     {
         mimir.initWIFI(&config) ? mimir.pixelSystemStatus(WIFI, GREEN) : mimir.pixelSystemStatus(WIFI, RED);
+
+        sendData.auth.deviceId = config.deviceId;
+        sendData.auth.userId = config.userId;
+        sendData.auth.serialNumber = config.serialNumber;
+        sendData.auth.macAddress = WiFi.macAddress();
+        sendData.status = mimir.getStatus();
+        sendData.data = data;
+
         sendAuth.email = config.email;
         sendAuth.serialNumber = config.serialNumber;
         sendAuth.macAddress = WiFi.macAddress();
+
+        mimir.logData(data, "/testing.txt");
+
         mimir.WiFi_ON();
-        mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config) ? mimir.pixelSystemStatus(SERVER, GREEN) : mimir.pixelSystemStatus(SERVER, RED);
+        if (mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config))
+        {
+            mimir.pixelSystemStatus(SERVER, GREEN);
+            mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
+        }
+        else
+        {
+            mimir.pixelSystemStatus(SERVER, RED);
+        }
         mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////
     //////////////////////SEND DATA////////////////////
     ///////////////////////////////////////////////////
-    if (bootCount % 3 == 0)
+    if (bootCount % 3 == 0 && bootCount != 0)
     {
         sendData.auth.deviceId = config.deviceId;
         sendData.auth.userId = config.userId;
