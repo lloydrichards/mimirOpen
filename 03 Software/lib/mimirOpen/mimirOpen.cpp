@@ -7,7 +7,6 @@
 #include "time.h"
 #include <EEPROM.h>
 #include "driver/adc.h"
-#include <esp_wifi.h>
 #include <esp_bt.h>
 
 SPIClass spiSD(HSPI);
@@ -972,9 +971,8 @@ void mimirOpen::SLEEP(long interval)
 {
     //CONFIG Sleep Pin
     Serial.println("Config Sleep Pin");
-    gpio_pullup_en(GPIO_NUM_26);    // use pullup on GPIO
-    gpio_pulldown_dis(GPIO_NUM_26); // not use pulldown on GPIO
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
+    //GPIO Mask = 2^25+2^26+2^27 = 234881024 => 0xE000000
+    esp_sleep_enable_ext1_wakeup(GPIOBitMask, LOW)
 
     // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
     if ((WiFi.status() == WL_CONNECTED))

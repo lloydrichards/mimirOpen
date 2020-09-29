@@ -30,14 +30,28 @@ void setup()
     //////////////////////STARTUP//////////////////////
     ///////////////////////////////////////////////////
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    mimir.printBootReason();
+    int wakeUpGPIONumber = Math.floor(log(esp_sleep_get_ext1_wakeup_status()) / log(2));
+    switch (wakeUpGPIONumber)
+    {
+    case ENVIRO_PIN:
+        Serial.println("ENVIRO Button Pushed!");
+        return;
+    case MONITOR_PIN:
+        Serial.println("MONITOR Button Pushed!");
+        return;
+    case RADAR_PIN:
+        Serial.println("RADAR Button Pushed!");
+        return;
+    default:
+        mimir.printBootReason();
+        return;
+    }
     config config = mimir.initSPIFFS();
     mimir.initPixels();
     mimir.initMicroSD("/testing.txt");
     mimir.initSensors(BSECState, BSECTime);
     envData data = mimir.readSensors(BSECState, BSECTime);
     mimir.printSensors(data);
-    
 
     ///////////////////////////////////////////////////
     /////////////////////MODE CHANGE///////////////////
@@ -84,20 +98,23 @@ void setup()
         sendData.data = data;
         mimir.logData(data, "/testing.txt");
         //Everything that happens with the server happens in here
-        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-        // delay(500);
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+        delay(500);
         mimir.WiFi_ON();
         mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
         mimir.WiFi_OFF();
-        // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
+        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
     }
     ///////////////////////////////////////////////////
     /////////////////////SLEEP TIME////////////////////
     ///////////////////////////////////////////////////
 
     mimir.saveToSPIFFS(config);
+    Serial.println("\n-----------------");
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
+    Serial.print("Battery Percent: ");
+    Serial.println(mimir.getBatteryPercent(mimir.getBatteryVoltage()));
     bootCount++;
     mimir.SLEEP(5);
 }
