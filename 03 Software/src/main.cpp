@@ -61,7 +61,9 @@ void setup()
     {
         mimir.pixelBootUp();
         mimir.pixelSystemStatus(BATTERY, RgbColor(map(BatPercent, 0, 100, 128, 0), map(BatPercent, 0, 100, 0, 128), 0));
+        mimir.pixelSystemStatus(MICROSD, YELLOW);
         mimir.initMicroSD("/testing.txt") ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
+        mimir.pixelSystemStatus(SENSORS, YELLOW);
         mimir.initSensors(BSECState, BSECTime) ? mimir.pixelSystemStatus(SENSORS, GREEN) : mimir.pixelSystemStatus(SENSORS, RED);
     }
     else
@@ -96,6 +98,7 @@ void setup()
     ///////////////////////////////////////////////////
     if (bootCount == 0)
     {
+        mimir.pixelSystemStatus(WIFI, YELLOW);
         mimir.initWIFI(&config) ? mimir.pixelSystemStatus(WIFI, GREEN) : mimir.pixelSystemStatus(WIFI, RED);
 
         sendData.auth.deviceId = config.deviceId;
@@ -112,6 +115,7 @@ void setup()
         mimir.logData(data, "/testing.txt");
 
         mimir.WiFi_ON();
+        mimir.pixelSystemStatus(SERVER, YELLOW);
         if (mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config))
         {
             mimir.pixelSystemStatus(SERVER, GREEN);

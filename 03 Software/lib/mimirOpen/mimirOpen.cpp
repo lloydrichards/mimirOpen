@@ -179,6 +179,7 @@ bool mimirOpen::initMicroSD(String filename)
     else
     {
         Serial.println("File already exists");
+        connected = true;
     }
     file.close();
     return connected;
