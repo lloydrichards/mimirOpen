@@ -14,7 +14,9 @@
 #define addrBME680 0x76
 #define addrCompas 0X0C
 
-#define BATTERY_PIN 12
+#define GPIOBitMask 0xE000000
+
+#define BATTERY_PIN 34
 #define PIXEL_PIN 33
 #define PIXEL_PWR_PIN 32
 #define PIXEL_COUNT 5
@@ -125,10 +127,11 @@ public:
 
     //Init
     void initPixels();
+    void pixelBootUp();
 
-    void initSensors(uint8_t *BSECstate, int64_t &BSECTime);
-    void initMicroSD(String filename = "/0000-00-00.txt");
-    void initWIFI(config *config);
+    bool initSensors(uint8_t *BSECstate, int64_t &BSECTime);
+    bool initMicroSD(String filename = "/0000-00-00.txt");
+    bool initWIFI(config *config);
     void forceWIFI(config *config);
     config initSPIFFS();
     bool changeMode(config *config, int wait = 5000);
@@ -136,8 +139,8 @@ public:
     //Main
     config updateConfig();
     void saveToSPIFFS(config data);
-    void sendAuth(String address, AuthPackage auth, config *config);
-    void sendData(String address, DataPackage data, config *config);
+    bool sendAuth(String address, AuthPackage auth, config *config);
+    bool sendData(String address, DataPackage data, config *config);
     envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
@@ -151,6 +154,7 @@ public:
     void printBootReason();
     void pixelStatus(systems sys, int duration = 100);
     void pixelSystemBusy(SYS_PIXEL system, RgbColor colour);
+    void pixelSystemStatus(SYS_PIXEL system, RgbColor colour);
     String stringData(envData data, systems sys);
     systems getStatus();
     void WiFi_ON();

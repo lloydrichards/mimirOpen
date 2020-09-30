@@ -7,6 +7,7 @@
 #include "time.h"
 #include <EEPROM.h>
 #include "driver/adc.h"
+#include <esp_bt.h>
 
 SPIClass spiSD(HSPI);
 
@@ -69,9 +70,9 @@ RgbColor black(0);
 
 mimirOpen::mimirOpen(int baudRate)
 {
+    adc_power_on();
     Serial.begin(baudRate);
     StartTime = millis();
-    adc_power_on();
     pinMode(MONITOR_PIN, INPUT_PULLUP);
     pinMode(RADAR_PIN, INPUT_PULLUP);
     pinMode(ENVIRO_PIN, INPUT_PULLUP);
@@ -84,12 +85,18 @@ void mimirOpen::initPixels()
     pixel.Show();
 }
 
-void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
+bool mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
 {
+    bool connectSHT31 = false;
+    bool connectVEML6030 = false;
+    bool connectBME680 = false;
+    bool connectLSM303 = false;
+
     if (SHT31.begin(addrSHT31D))
     {
         Serial.println("SHT31 Success!");
         STATUS_SHT31 = OKAY;
+        connectSHT31 = true;
     }
     else
     {
@@ -104,6 +111,7 @@ void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
         VEML6030.enablePowSave();
         Serial.println("VEML6030 Success!");
         STATUS_VEML6030 = OKAY;
+        connectVEML6030 = true;
     }
     else
     {
@@ -116,6 +124,7 @@ void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
 
         BME680.setConfig(bsec_config_iaq);
         STATUS_BME680 = OKAY;
+        connectBME680 = true;
         Serial.println("BME680 Success!");
         if (BSECTime)
         {
@@ -134,24 +143,28 @@ void mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
     }
     if (LSM303.begin())
     {
-        Serial.println("Compass Success!");
+        Serial.println("LSM303 Success!");
         STATUS_LSM303 = OKAY;
+        connectLSM303 = true;
     }
     else
     {
-        Serial.println("Compass Failed!");
+        Serial.println("LSM303 Failed!");
         STATUS_LSM303 = ERROR_L;
     }
+
+    return connectSHT31 && connectVEML6030 && connectBME680 && connectLSM303;
 }
 
-void mimirOpen::initMicroSD(String filename)
+bool mimirOpen::initMicroSD(String filename)
 {
+    bool connected = false;
     spiSD.begin(14, 2, 15, 13);
     Serial.println("Initializing SD card...");
     if (!SD.begin(13, spiSD))
     {
         Serial.println("ERROR - SD card initialization failed!");
-        return; // init failed
+        return connected; // init failed
     }
     // If the data.txt file doesn't exist
     // Create a file on the SD card and write the data labels
@@ -161,17 +174,21 @@ void mimirOpen::initMicroSD(String filename)
         Serial.println("File doens't exist");
         Serial.println("Creating file...");
         writeFile(SD, filename.c_str(), "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
+        connected = true;
     }
     else
     {
         Serial.println("File already exists");
+        connected = true;
     }
     file.close();
+    return connected;
 }
-void mimirOpen::initWIFI(config *config)
+bool mimirOpen::initWIFI(config *config)
 {
+    bool connected = false;
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -193,6 +210,7 @@ void mimirOpen::initWIFI(config *config)
     {
         wifi_signal = WiFi.RSSI();
         SetupTime();
+        connected = true;
     }
     //Update Device Info with Params
     config->email = custom_EMAIL.getValue();
@@ -200,12 +218,13 @@ void mimirOpen::initWIFI(config *config)
     config->deviceName = custom_DEVICE_NAME.getValue();
 
     WiFi_OFF();
+    return connected;
 }
 
 void mimirOpen::forceWIFI(config *config)
 {
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 12, " data-mask='____-____-____'");
+    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -420,8 +439,9 @@ void mimirOpen::printSensors(envData data)
     Serial.println(data.bearing);
 }
 
-void mimirOpen::sendData(String address, DataPackage data, config *config)
+bool mimirOpen::sendData(String address, DataPackage data, config *config)
 {
+    bool connected = false;
     if ((WiFi.status() == WL_CONNECTED))
     {
         Serial.println("Sending Data...");
@@ -451,6 +471,7 @@ void mimirOpen::sendData(String address, DataPackage data, config *config)
             config->userId = userId;
             config->deviceId = deviceId;
             config->mode = receivedMode;
+            connected = true;
         }
         else
         {
@@ -459,10 +480,12 @@ void mimirOpen::sendData(String address, DataPackage data, config *config)
         }
         http.end();
     }
+    return connected;
 }
 
-void mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
+bool mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
 {
+    bool authenticated = false;
     if ((WiFi.status() == WL_CONNECTED))
     {
         Serial.println("Sending Auth...");
@@ -489,6 +512,11 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
             Serial.print("Received Mode: ");
             Serial.println(receivedMode);
 
+            if (deviceId)
+            {
+                authenticated = true;
+            }
+
             config->userId = userId;
             config->deviceId = deviceId;
             config->mode = receivedMode;
@@ -500,6 +528,7 @@ void mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
         }
         http.end();
     }
+    return authenticated;
 }
 
 bool mimirOpen::changeMode(config *config, int wait)
@@ -611,16 +640,16 @@ float mimirOpen::getBatteryVoltage()
     float R1 = 100000.0; // resistance of R1 (1M)
     float R2 = 100000.0; // resistance of R2 (1M)
 
-    for (int i = 0; i < 500; i++)
+    for (int i = 0; i < 100; i++)
     {
         sum += analogRead(BATTERY_PIN);
         delayMicroseconds(1000);
     }
     // calculate the voltage
-    voltage = sum / (float)500;
-    voltage = (voltage * 1.98) / 4096.0 * 2.101; //for internal 1.1v reference
-                                                 // use if added divider circuit
-    //voltage = voltage / (R2 / (R1 + R2));
+    voltage = sum / (float)100;
+    voltage = (voltage * 3.3) / 4096.0 * 1.115; //for internal 1.1v reference
+                                                // use if added divider circuit
+    voltage = voltage / (R2 / (R1 + R2));
     //round value by two precision
     //voltage = roundf(voltage * 100) / 100;
 
@@ -717,6 +746,12 @@ void mimirOpen::pixelStatus(systems sys, int duration)
 }
 
 void mimirOpen::pixelSystemBusy(SYS_PIXEL system, RgbColor colour)
+{
+    pixel.SetPixelColor(system, colour);
+    pixel.Show();
+}
+
+void mimirOpen::pixelSystemStatus(SYS_PIXEL system, RgbColor colour)
 {
     pixel.SetPixelColor(system, colour);
     pixel.Show();
@@ -962,7 +997,7 @@ void mimirOpen::WiFi_ON()
 };
 void mimirOpen::WiFi_OFF()
 {
-    WiFi.disconnect();
+    WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 };
 
@@ -970,11 +1005,27 @@ void mimirOpen::SLEEP(long interval)
 {
     //CONFIG Sleep Pin
     Serial.println("Config Sleep Pin");
-    gpio_pullup_en(GPIO_NUM_26);    // use pullup on GPIO
-    gpio_pulldown_dis(GPIO_NUM_26); // not use pulldown on GPIO
+    //---SINGLE GPIO PIN---
+    gpio_pullup_en(GPIO_NUM_26);
+    gpio_pulldown_dis(GPIO_NUM_26);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
+    //---MULTI GPIO PIN---
+    //****This will need pull up resistors on the other end of the buttons so they pull high, not low
+    //GPIO Mask = 2^25+2^26+2^27 = 234881024 => 0xE000000
+    //esp_sleep_enable_ext1_wakeup(GPIOBitMask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
-    // esp_sleep_enable_ext1_wakeup(0x200800000, ESP_EXT1_WAKEUP_ALL_LOW);
+    if ((WiFi.status() == WL_CONNECTED))
+    {
+        Serial.println("Turning off Wifi Stuff...");
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    }
+
+    Serial.println("Turning off Bluetooth Stuff...");
+    btStop();
+    esp_bt_controller_disable();
+    Serial.println("Turning off ADC Stuff...");
+    adc_power_off();
 
     //CONFIG Sleep Timer
     Serial.println("Config Sleep Timer");                                            // Wake if GPIO is low
@@ -986,8 +1037,7 @@ void mimirOpen::SLEEP(long interval)
     Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
     Serial.println("Starting deep-sleep...");
 
-    adc_power_off();
-    esp_wifi_stop();
+    delay(100);
     esp_deep_sleep_start();
 }
 
@@ -1106,6 +1156,7 @@ void mimirOpen::turnOFFPixels()
     }
     pixel.Show();
 }
+
 ///////////////////////////////////////////////////
 /////////////////TESTING FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
@@ -1170,6 +1221,17 @@ void mimirOpen::testPixels(int repeat, int _delay)
         pixel.SetPixelColor(i, black);
         pixel.Show();
     }
+}
+
+void mimirOpen::pixelBootUp()
+{
+    for (int i = 0; i < PIXEL_COUNT; i++)
+    {
+        pixel.SetPixelColor(i, blue);
+        pixel.Show();
+        delay(100);
+    }
+    turnOFFPixels();
 }
 
 void mimirOpen::testHTTPRequest(String address)

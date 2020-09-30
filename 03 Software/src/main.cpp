@@ -15,10 +15,15 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include <bsec.h>
+#include <NeoPixelBus.h>
 
 mimirOpen mimir(115200);
 DataPackage sendData;
 AuthPackage sendAuth;
+
+RgbColor RED(128, 0, 0);
+RgbColor YELLOW(64, 64, 0);
+RgbColor GREEN(0, 128, 0);
 
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR uint8_t BSECState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
@@ -30,14 +35,45 @@ void setup()
     //////////////////////STARTUP//////////////////////
     ///////////////////////////////////////////////////
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    mimir.printBootReason();
+    // int wakeUpGPIONumber = int(log(esp_sleep_get_ext1_wakeup_status()) / log(2));
+    // switch (wakeUpGPIONumber)
+    // {
+    // case ENVIRO_PIN:
+    //     Serial.println("ENVIRO Button Pushed!");
+    //     return;
+    // case MONITOR_PIN:
+    //     Serial.println("MONITOR Button Pushed!");
+    //     return;
+    // case RADAR_PIN:
+    //     Serial.println("RADAR Button Pushed!");
+    //     return;
+    // default:
+    //     mimir.printBootReason();
+    //     return;
+    // }
+    int BatPercent = mimir.getBatteryPercent(mimir.getBatteryVoltage());
+    Serial.print("Battery Percent: ");
+    Serial.print(BatPercent);
+    Serial.println("%");
     config config = mimir.initSPIFFS();
     mimir.initPixels();
-    mimir.initMicroSD("/testing.txt");
-    mimir.initSensors(BSECState, BSECTime);
+    if (bootCount == 0)
+    {
+        mimir.pixelBootUp();
+        mimir.pixelSystemStatus(BATTERY, RgbColor(map(BatPercent, 0, 100, 128, 0), map(BatPercent, 0, 100, 0, 128), 0));
+        mimir.pixelSystemStatus(MICROSD, YELLOW);
+        mimir.initMicroSD("/testing.txt") ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
+        mimir.pixelSystemStatus(SENSORS, YELLOW);
+        mimir.initSensors(BSECState, BSECTime) ? mimir.pixelSystemStatus(SENSORS, GREEN) : mimir.pixelSystemStatus(SENSORS, RED);
+    }
+    else
+    {
+        mimir.initMicroSD("/testing.txt");
+        mimir.initSensors(BSECState, BSECTime);
+    }
+
     envData data = mimir.readSensors(BSECState, BSECTime);
     mimir.printSensors(data);
-    mimir.logData(data, "/testing.txt");
 
     ///////////////////////////////////////////////////
     /////////////////////MODE CHANGE///////////////////
@@ -62,19 +98,39 @@ void setup()
     ///////////////////////////////////////////////////
     if (bootCount == 0)
     {
-        mimir.testPixels(1);
-        mimir.initWIFI(&config);
+        mimir.pixelSystemStatus(WIFI, YELLOW);
+        mimir.initWIFI(&config) ? mimir.pixelSystemStatus(WIFI, GREEN) : mimir.pixelSystemStatus(WIFI, RED);
+
+        sendData.auth.deviceId = config.deviceId;
+        sendData.auth.userId = config.userId;
+        sendData.auth.serialNumber = config.serialNumber;
+        sendData.auth.macAddress = WiFi.macAddress();
+        sendData.status = mimir.getStatus();
+        sendData.data = data;
+
         sendAuth.email = config.email;
         sendAuth.serialNumber = config.serialNumber;
         sendAuth.macAddress = WiFi.macAddress();
+
+        mimir.logData(data, "/testing.txt");
+
         mimir.WiFi_ON();
-        mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config);
+        mimir.pixelSystemStatus(SERVER, YELLOW);
+        if (mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config))
+        {
+            mimir.pixelSystemStatus(SERVER, GREEN);
+            mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
+        }
+        else
+        {
+            mimir.pixelSystemStatus(SERVER, RED);
+        }
         mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////
     //////////////////////SEND DATA////////////////////
     ///////////////////////////////////////////////////
-    if (bootCount % 3 == 0)
+    if (bootCount % 3 == 0 && bootCount != 0)
     {
         sendData.auth.deviceId = config.deviceId;
         sendData.auth.userId = config.userId;
@@ -82,6 +138,7 @@ void setup()
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
+        mimir.logData(data, "/testing.txt");
         //Everything that happens with the server happens in here
         WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
         delay(500);
@@ -95,12 +152,11 @@ void setup()
     ///////////////////////////////////////////////////
 
     mimir.saveToSPIFFS(config);
+    Serial.println("\n-----------------");
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;
     mimir.SLEEP(5);
 }
 
-void loop()
-{
-}
+void loop(){};
