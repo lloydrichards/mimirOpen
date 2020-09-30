@@ -10,11 +10,9 @@ Open Hardware project outlining the hardware, software and design schematics for
 1. Production
 1. Resources
 
-## Version 1.2
+## Version 1.3
 
-With the hardware for the most part all in the right place (except the battery monitor pin), it seems appropriate to move onto the next version. Here we will be optimizing the preformance of the battery and tiding up some of the functions so they're cleaner and more expressive for future adaptation.
-
-In this version I focused on getting the core functionality of booting up the device, initializing systems and then putting the device to sleep. Depending on the bootCount of the device it would sometimes send data to the servers, or have light indications on the system status. Finally, I did some optimization of the timings of the device when it is on and asleep inorder to conserve battery life. As of 9/30 the device turns on for 25-30sec during bootup, sleeps for 5min and then turns on for 2.9sec when just reading and 9.8sec when sending data. This has resulted in the 2000mAh battery lasting a week or two.
+The purpose of version 1.3 is to get the device working properly and efficently on a battery with as long of a battery life as possible.  Hardware changes have been made to add in supply voltage supervisisors as well as correct mistakes with the switches and test different LDOs.  Finally an additional Fuel Gauge has been added for more accurate measurement of the battery life as well as for feedback while the device is charging or low battery.
 
 ## Software with PlatformIO
 
