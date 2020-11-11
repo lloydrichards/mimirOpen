@@ -51,16 +51,13 @@ void setup()
     //     mimir.printBootReason();
     //     return;
     // }
-    int BatPercent = mimir.getBatteryPercent(mimir.getBatteryVoltage());
-    Serial.print("Battery Percent: ");
-    Serial.print(BatPercent);
-    Serial.println("%");
+    mimir.i2cScanner();
     config config = mimir.initSPIFFS();
     mimir.initPixels();
     if (bootCount == 0)
     {
         mimir.pixelBootUp();
-        mimir.pixelSystemStatus(BATTERY, RgbColor(map(BatPercent, 0, 100, 128, 0), map(BatPercent, 0, 100, 0, 128), 0));
+        mimir.pixelSystemStatus(BATTERY, GREEN);
         mimir.pixelSystemStatus(MICROSD, YELLOW);
         mimir.initMicroSD("/testing.txt") ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
         mimir.pixelSystemStatus(SENSORS, YELLOW);

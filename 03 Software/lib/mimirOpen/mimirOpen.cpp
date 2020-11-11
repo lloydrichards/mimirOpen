@@ -81,6 +81,8 @@ mimirOpen::mimirOpen(int baudRate)
 void mimirOpen::initPixels()
 {
     Serial.println("Starting Pixels...");
+    pinMode(PIXEL_PWR_PIN, OUTPUT);
+    digitalWrite(PIXEL_PWR_PIN, LOW);
     pixel.Begin();
     pixel.Show();
 }
@@ -171,7 +173,7 @@ bool mimirOpen::initMicroSD(String filename)
     File file = SD.open(filename.c_str());
     if (!file)
     {
-        Serial.println("File doens't exist");
+        Serial.println("File doesn't exist");
         Serial.println("Creating file...");
         writeFile(SD, filename.c_str(), "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
         connected = true;
@@ -864,7 +866,7 @@ void mimirOpen::logData(envData data, String filename)
     File file = SD.open(filename);
     if (!file)
     {
-        Serial.println("File doens't exist");
+        Serial.println("File doesn't exist");
         Serial.println("Creating file...");
         writeFile(SD, filename.c_str(), header().c_str());
     }
