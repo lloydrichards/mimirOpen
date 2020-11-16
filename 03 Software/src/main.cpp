@@ -52,13 +52,14 @@ void setup()
     //     mimir.printBootReason();
     //     return;
     // }
-    mimir.i2cScanner();
+    //mimir.i2cScanner();
     String filename = "/"+mimir.dateToString()+".txt";
     Serial.println(filename);
     config config = mimir.initSPIFFS();
-    mimir.initPixels();
+    
     if (bootCount == 0)
     {
+        mimir.initPixels();
         mimir.pixelBootUp();
         mimir.pixelSystemStatus(BATTERY, GREEN);
         mimir.pixelSystemStatus(MICROSD, YELLOW);
@@ -68,7 +69,6 @@ void setup()
     }
     else
     {
-        mimir.initMicroSD(filename);
         mimir.initSensors(BSECState, BSECTime);
     }
 
@@ -80,6 +80,7 @@ void setup()
     ///////////////////////////////////////////////////
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0)
     {
+        mimir.initPixels();
         Serial.println("\nMonitor Button was pressed!");
         mimir.changeMode(&config, 8000);
     }
@@ -89,6 +90,7 @@ void setup()
     ///////////////////////////////////////////////////
     if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(RADAR_PIN) == LOW)
     {
+        mimir.initPixels();
         Serial.println("\nEntering Forced Mode");
         mimir.forceWIFI(&config);
     }
@@ -138,14 +140,10 @@ void setup()
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
-        mimir.logData(data, filename);
         //Everything that happens with the server happens in here
-        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-        delay(500);
         mimir.WiFi_ON();
         mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
         mimir.WiFi_OFF();
-        WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); //enable brownout detector
     }
     ///////////////////////////////////////////////////
     /////////////////////SLEEP TIME////////////////////

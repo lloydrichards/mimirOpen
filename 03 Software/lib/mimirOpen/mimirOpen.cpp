@@ -161,6 +161,7 @@ bool mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
 bool mimirOpen::initMicroSD(String filename)
 {
     bool connected = false;
+    pinMode(13, OUTPUT);
     spiSD.begin(14, 2, 15, 13);
     Serial.println("Initializing SD card...");
     if (!SD.begin(13, spiSD))
@@ -197,6 +198,8 @@ bool mimirOpen::initWIFI(config *config)
 
     WiFiManager wifiManager;
 
+    wifiManager.setDebugOutput(true);
+
     wifiManager.setCustomHeadElement("<script>Array.prototype.forEach.call(document.body.querySelectorAll('*[data-mask]'), applyDataMask); function applyDataMask(field) {var mask = field.dataset.mask.split('');function stripMask(maskedData){function isDigit(char){    return /\d /.test(char);}return maskedData.split('').filter(isDigit);} function applyMask(data){    return mask.map(function(char) {if (char != '_')    return char;if (data.length == 0)    return char;return data.shift();               })        .join('')} function reapplyMask(data){return applyMask(stripMask(data));}function changed(){var oldStart = field.selectionStart;var oldEnd = field.selectionEnd;field.value = reapplyMask(field.value);field.selectionStart = oldStart;field.selectionEnd = oldEnd;}field.addEventListener('click', changed)field.addEventListener('keyup', changed)}</script>");
     wifiManager.setCustomHeadElement("<style></style>");
     wifiManager.addParameter(&introduction);
@@ -206,6 +209,8 @@ bool mimirOpen::initWIFI(config *config)
     wifiManager.addParameter(&contact);
 
     wifiManager.setAPCallback(WiFiCallback);
+    wifiManager.setConfigPortalTimeout(180);
+    wifiManager.setConnectTimeout(30);
     wifiManager.autoConnect("mimirOpen WIFI");
 
     if (WiFi.status() == WL_CONNECTED)
@@ -1007,6 +1012,13 @@ String mimirOpen::header()
 
 void mimirOpen::WiFiCallback(WiFiManager *myWiFiManager)
 {
+    pixel.SetPixelColor(1,black);
+    pixel.SetPixelColor(2,black);
+    pixel.SetPixelColor(3,black);
+    pixel.SetPixelColor(4,black);
+    pixel.SetPixelColor(5,yellow);
+    pixel.Show();
+    
     Serial.println("-WiFiConfig-");
     Serial.println("----Mode----");
     Serial.println();
