@@ -145,7 +145,9 @@ public:
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
 
-    //Helping
+    //Helper
+    void printTimeDate();
+    String dateToString();
     int64_t getTimestamp();
     bool checkBSECSensor();
     void printBSECState(const char *name, const uint8_t *state);

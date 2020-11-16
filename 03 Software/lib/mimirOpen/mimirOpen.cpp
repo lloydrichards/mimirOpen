@@ -588,6 +588,33 @@ bool mimirOpen::changeMode(config *config, int wait)
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
 
+void mimirOpen::printTimeDate()
+{
+    struct tm timeinfo;
+
+    if (!getLocalTime(&timeinfo))
+    {
+        Serial.println("Failed to obtain time");
+        return;
+    }
+    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
+String mimirOpen::dateToString()
+{
+    struct tm timeinfo;
+    char output[11];
+    while (!getLocalTime(&timeinfo, 1000))
+    { // Wait for up to 1-secs
+        Serial.println(F("Failed to obtain time"));
+        return "00-00-0000";
+    }
+    //See http://www.cplusplus.com/reference/ctime/strftime/
+    //Serial.println(&timeinfo, "%H:%M:%S");                               // Displays: 14:05:49
+    strftime(output, sizeof(output), "%d-%m-%Y", &timeinfo); // Creates: '14:05:49'
+
+    return output;
+}
+
 int64_t mimirOpen::getTimestamp()
 {
     struct timeval tv;

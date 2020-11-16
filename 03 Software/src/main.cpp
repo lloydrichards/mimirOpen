@@ -29,6 +29,7 @@ RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR uint8_t BSECState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 RTC_DATA_ATTR int64_t BSECTime = 0;
 
+
 void setup()
 {
     ///////////////////////////////////////////////////
@@ -52,6 +53,8 @@ void setup()
     //     return;
     // }
     mimir.i2cScanner();
+    String filename = "/"+mimir.dateToString()+".txt";
+    Serial.println(filename);
     config config = mimir.initSPIFFS();
     mimir.initPixels();
     if (bootCount == 0)
@@ -59,13 +62,13 @@ void setup()
         mimir.pixelBootUp();
         mimir.pixelSystemStatus(BATTERY, GREEN);
         mimir.pixelSystemStatus(MICROSD, YELLOW);
-        mimir.initMicroSD("/testing.txt") ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
+        mimir.initMicroSD(filename) ? mimir.pixelSystemStatus(MICROSD, GREEN) : mimir.pixelSystemStatus(MICROSD, RED);
         mimir.pixelSystemStatus(SENSORS, YELLOW);
         mimir.initSensors(BSECState, BSECTime) ? mimir.pixelSystemStatus(SENSORS, GREEN) : mimir.pixelSystemStatus(SENSORS, RED);
     }
     else
     {
-        mimir.initMicroSD("/testing.txt");
+        mimir.initMicroSD(filename);
         mimir.initSensors(BSECState, BSECTime);
     }
 
@@ -109,7 +112,7 @@ void setup()
         sendAuth.serialNumber = config.serialNumber;
         sendAuth.macAddress = WiFi.macAddress();
 
-        mimir.logData(data, "/testing.txt");
+        mimir.logData(data, filename);
 
         mimir.WiFi_ON();
         mimir.pixelSystemStatus(SERVER, YELLOW);
@@ -135,7 +138,7 @@ void setup()
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
         sendData.data = data;
-        mimir.logData(data, "/testing.txt");
+        mimir.logData(data, filename);
         //Everything that happens with the server happens in here
         WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
         delay(500);
@@ -150,10 +153,12 @@ void setup()
 
     mimir.saveToSPIFFS(config);
     Serial.println("\n-----------------");
+    mimir.printTimeDate();
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;
     mimir.SLEEP(5);
 }
 
-void loop(){};
+void loop(){
+};
