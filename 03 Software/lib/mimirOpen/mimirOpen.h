@@ -62,25 +62,23 @@ enum SYS_MODE
 struct config
 {
     String email;
-    String serialNumber;
     String deviceName;
     String userId;
-    String deviceId;
     int mode;
 };
 
 struct authType
 {
+    String email;
     String userId;
     String deviceId;
-    String serialNumber;
     String macAddress;
 };
 
 struct systems
 {
+    int bootCount;
     BAT_STATUS battery;
-    int batteryPercent;
     SYS_STATUS wifi;
     SYS_STATUS sd;
     SYS_STATUS server;
@@ -88,6 +86,7 @@ struct systems
     SYS_STATUS LSM303;
     SYS_STATUS SHT31;
     SYS_STATUS VEML6030;
+    SYS_STATUS LC709;
     SYS_MODE MODE;
 };
 
@@ -103,6 +102,8 @@ struct envData
     float eVOC;
     float eCO2;
     int bearing;
+    float batteryVoltage;
+    float batteryPercentage;
 };
 
 struct DataPackage
@@ -110,13 +111,6 @@ struct DataPackage
     authType auth;
     systems status;
     envData data;
-};
-
-struct AuthPackage
-{
-    String email;
-    String serialNumber;
-    String macAddress;
 };
 
 class mimirOpen
@@ -139,24 +133,23 @@ public:
     //Main
     config updateConfig();
     void saveToSPIFFS(config data);
-    bool sendAuth(String address, AuthPackage auth, config *config);
     bool sendData(String address, DataPackage data, config *config);
     envData readSensors(uint8_t *BSECstate, int64_t &BSECTime);
     void printSensors(envData data);
     void logData(envData data, String filename = "/0000-00-00.txt");
 
     //Helper
+    String getDeviceId();
     void printTimeDate();
     String dateToString();
     int64_t getTimestamp();
     bool checkBSECSensor();
     void printBSECState(const char *name, const uint8_t *state);
-    float getBatteryVoltage();
-    int getBatteryPercent(float voltage);
     void printBootReason();
     void pixelStatus(systems sys, int duration = 100);
     void pixelSystemBusy(SYS_PIXEL system, RgbColor colour);
     void pixelSystemStatus(SYS_PIXEL system, RgbColor colour);
+    void turnOFFPixels();
     String stringData(envData data, systems sys);
     systems getStatus();
     void WiFi_ON();
@@ -169,6 +162,7 @@ public:
     void testPixels(int repeat = 5, int _delay = 100);
 
 private:
+    String VERSION = "--V1.3--";
     String TimeStr, DateStr, ErrorMessage; // strings to hold time and date
     const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 
@@ -191,12 +185,11 @@ private:
     void loadBSECState();
     void updateBSECState();
     void checkBSECStatus();
-    void turnOFFPixels();
+
     RgbColor pixelSystemColour(SYS_STATUS stat);
     RgbColor pixelBatteryColour(BAT_STATUS battery);
     float calcAltitude(float pressure, float temperature);
     float averageValue(float values[]);
-    String packageAuthJSON(AuthPackage auth);
     String packageJSON(DataPackage data);
     String header();
     bool SetupTime();

@@ -24,12 +24,14 @@ SPIClass spiSD(HSPI);
 #include "bsec.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_LIS2MDL.h>
+#include "Adafruit_LC709203F.h"
 
 //Define Sensors
 Adafruit_SHT31 SHT31 = Adafruit_SHT31();
 SparkFun_Ambient_Light VEML6030(addrVEML6030);
 Bsec BME680;
 Adafruit_LIS2MDL LSM303 = Adafruit_LIS2MDL();
+Adafruit_LC709203F LC709;
 
 //BME680 State
 const uint8_t bsec_config_iaq[] = {
@@ -93,6 +95,19 @@ bool mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
     bool connectVEML6030 = false;
     bool connectBME680 = false;
     bool connectLSM303 = false;
+    bool connectLC709 = false;
+
+    if (LC709.begin())
+    {
+        Serial.println("LC709 Success!");
+        LC709.setPackSize(LC709203F_APA_2000MAH);
+        LC709.setPowerMode(LC709203F_POWER_OPERATE);
+        connectLC709 = true;
+    }
+    else
+    {
+        Serial.println("LC709 Failed!");
+    }
 
     if (SHT31.begin(addrSHT31D))
     {
@@ -155,7 +170,7 @@ bool mimirOpen::initSensors(uint8_t *BSECState, int64_t &BSECTime)
         STATUS_LSM303 = ERROR_L;
     }
 
-    return connectSHT31 && connectVEML6030 && connectBME680 && connectLSM303;
+    return connectSHT31 && connectVEML6030 && connectBME680 && connectLSM303 && connectLC709;
 }
 
 bool mimirOpen::initMicroSD(String filename)
@@ -191,7 +206,6 @@ bool mimirOpen::initWIFI(config *config)
 {
     bool connected = false;
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -204,7 +218,6 @@ bool mimirOpen::initWIFI(config *config)
     wifiManager.setCustomHeadElement("<style></style>");
     wifiManager.addParameter(&introduction);
     wifiManager.addParameter(&custom_EMAIL);
-    wifiManager.addParameter(&custom_SERIAL_NUMBER);
     wifiManager.addParameter(&custom_DEVICE_NAME);
     wifiManager.addParameter(&contact);
 
@@ -221,7 +234,6 @@ bool mimirOpen::initWIFI(config *config)
     }
     //Update Device Info with Params
     config->email = custom_EMAIL.getValue();
-    config->serialNumber = custom_SERIAL_NUMBER.getValue();
     config->deviceName = custom_DEVICE_NAME.getValue();
 
     WiFi_OFF();
@@ -231,7 +243,6 @@ bool mimirOpen::initWIFI(config *config)
 void mimirOpen::forceWIFI(config *config)
 {
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
-    WiFiManagerParameter custom_SERIAL_NUMBER("Serial Number", "Serial#", config->serialNumber.c_str(), 16, " data-mask='____-____-____'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
     WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
@@ -242,7 +253,6 @@ void mimirOpen::forceWIFI(config *config)
     wifiManager.setCustomHeadElement("<style></style>");
     wifiManager.addParameter(&introduction);
     wifiManager.addParameter(&custom_EMAIL);
-    wifiManager.addParameter(&custom_SERIAL_NUMBER);
     wifiManager.addParameter(&custom_DEVICE_NAME);
     wifiManager.addParameter(&contact);
 
@@ -262,7 +272,6 @@ void mimirOpen::forceWIFI(config *config)
     }
     //Update Device Info with Params
     config->email = custom_EMAIL.getValue();
-    config->serialNumber = custom_SERIAL_NUMBER.getValue();
     config->deviceName = custom_DEVICE_NAME.getValue();
 
     WiFi_OFF();
@@ -298,10 +307,8 @@ config mimirOpen::initSPIFFS()
                 serializeJsonPretty(configJson, Serial);
 
                 newConfig.email = configJson["email"].as<String>();
-                newConfig.serialNumber = configJson["serialNumber"].as<String>();
                 newConfig.deviceName = configJson["deviceName"].as<String>();
                 newConfig.userId = configJson["userId"].as<String>();
-                newConfig.deviceId = configJson["deviceId"].as<String>();
                 newConfig.mode = configJson["mode"].as<int>();
             }
             else
@@ -350,10 +357,8 @@ config mimirOpen::updateConfig()
             serializeJsonPretty(configJson, Serial);
 
             newConfig.email = configJson["email"].as<String>();
-            newConfig.serialNumber = configJson["serialNumber"].as<String>();
             newConfig.deviceName = configJson["deviceName"].as<String>();
             newConfig.userId = configJson["userId"].as<String>();
-            newConfig.deviceId = configJson["deviceId"].as<String>();
             newConfig.mode = configJson["mode"].as<int>();
         }
         else
@@ -392,6 +397,8 @@ envData mimirOpen::readSensors(uint8_t *BSECstate, int64_t &BSECTime)
     data.iaqAccuracy = BME680.iaqAccuracy;
     data.eCO2 = BME680.co2Equivalent;
     data.eVOC = BME680.breathVocEquivalent;
+    data.batteryVoltage = LC709.cellVoltage();
+    data.batteryPercentage = LC709.cellPercent();
 
     LSM303.getEvent(&event);
     data.bearing = (atan2(event.magnetic.y, event.magnetic.x) * 180) / PI;
@@ -404,10 +411,8 @@ void mimirOpen::saveToSPIFFS(config data)
     Serial.println("Saving to SPIFFS");
     DynamicJsonDocument newConfigJson(1024);
     newConfigJson["email"] = data.email;
-    newConfigJson["serialNumber"] = data.serialNumber;
     newConfigJson["deviceName"] = data.deviceName;
     newConfigJson["userId"] = data.userId;
-    newConfigJson["deviceId"] = data.deviceId;
     newConfigJson["mode"] = data.mode;
 
     fs::File configFile = SPIFFS.open("/config.json", FILE_WRITE);
@@ -444,6 +449,10 @@ void mimirOpen::printSensors(envData data)
     Serial.println(data.eCO2);
     Serial.print("Bearing: ");
     Serial.println(data.bearing);
+    Serial.print("Battery (V): ");
+    Serial.println(data.batteryVoltage);
+    Serial.print("Battery (%): ");
+    Serial.println(data.batteryPercentage);
 }
 
 bool mimirOpen::sendData(String address, DataPackage data, config *config)
@@ -466,17 +475,13 @@ bool mimirOpen::sendData(String address, DataPackage data, config *config)
             Serial.println(response);
             deserializeJson(doc, response);
             const char *userId = doc["userId"];
-            const char *deviceId = doc["deviceId"];
             int receivedMode = doc["currentMode"];
             Serial.print("User ID: ");
             Serial.println(userId);
-            Serial.print("Device ID: ");
-            Serial.println(deviceId);
             Serial.print("Received Mode: ");
             Serial.println(receivedMode);
 
             config->userId = userId;
-            config->deviceId = deviceId;
             config->mode = receivedMode;
             connected = true;
         }
@@ -488,54 +493,6 @@ bool mimirOpen::sendData(String address, DataPackage data, config *config)
         http.end();
     }
     return connected;
-}
-
-bool mimirOpen::sendAuth(String address, AuthPackage auth, config *config)
-{
-    bool authenticated = false;
-    if ((WiFi.status() == WL_CONNECTED))
-    {
-        Serial.println("Sending Auth...");
-        String package = packageAuthJSON(auth);
-        HTTPClient http;
-        http.begin(address);
-        http.addHeader("Content-Type", "application/json");
-        int httpResponseCode = http.POST(package);
-        String response = http.getString();
-
-        if (httpResponseCode > 0)
-        {
-            StaticJsonDocument<200> doc;
-            Serial.println("Successful Sent Auth!");
-            Serial.println(response);
-            deserializeJson(doc, response);
-            const char *userId = doc["userId"];
-            const char *deviceId = doc["deviceId"];
-            int receivedMode = doc["currentMode"];
-            Serial.print("User ID: ");
-            Serial.println(userId);
-            Serial.print("Device ID: ");
-            Serial.println(deviceId);
-            Serial.print("Received Mode: ");
-            Serial.println(receivedMode);
-
-            if (deviceId)
-            {
-                authenticated = true;
-            }
-
-            config->userId = userId;
-            config->deviceId = deviceId;
-            config->mode = receivedMode;
-        }
-        else
-        {
-            Serial.println("Failed Auth");
-            Serial.println(response);
-        }
-        http.end();
-    }
-    return authenticated;
 }
 
 bool mimirOpen::changeMode(config *config, int wait)
@@ -592,6 +549,15 @@ bool mimirOpen::changeMode(config *config, int wait)
 ///////////////////////////////////////////////////
 /////////////////HELPER FUNCTIONS/////////////////
 ///////////////////////////////////////////////////
+
+String mimirOpen::getDeviceId()
+{
+    byte mac[6];
+    esp_efuse_read_mac(mac);
+
+    String deviceId = VERSION + String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+    return deviceId;
+};
 
 void mimirOpen::printTimeDate()
 {
@@ -665,60 +631,6 @@ void mimirOpen::printBSECState(const char *name, const uint8_t *state)
     Serial.print("\n");
 }
 
-float mimirOpen::getBatteryVoltage()
-{
-    pinMode(BATTERY_PIN, INPUT);
-    long sum = 0;
-    float voltage = 0.0; // calculated voltage
-
-    float R1 = 100000.0; // resistance of R1 (1M)
-    float R2 = 100000.0; // resistance of R2 (1M)
-
-    for (int i = 0; i < 100; i++)
-    {
-        sum += analogRead(BATTERY_PIN);
-        delayMicroseconds(1000);
-    }
-    // calculate the voltage
-    voltage = sum / (float)100;
-    voltage = (voltage * 3.3) / 4096.0 * 1.115; //for internal 1.1v reference
-                                                // use if added divider circuit
-    voltage = voltage / (R2 / (R1 + R2));
-    //round value by two precision
-    //voltage = roundf(voltage * 100) / 100;
-
-    return voltage;
-}
-
-int mimirOpen::getBatteryPercent(float volt)
-{
-    const float battery_max = 4.2; //maximum voltage of battery
-    const float battery_min = 3.0; //minimum voltage of battery before shutdown
-    batteryPercent = roundf(((volt - battery_min) / (battery_max - battery_min)) * 100);
-
-    if (batteryPercent < 10)
-    {
-        STATUS_BATTERY = CRITICAL_BATTERY;
-    }
-    else if (batteryPercent < 20)
-    {
-        STATUS_BATTERY = LOW_BATTERY;
-    }
-    else if (batteryPercent < 95)
-    {
-        STATUS_BATTERY = GOOD_BATTERY;
-    }
-    else if (batteryPercent < 100)
-    {
-        STATUS_BATTERY = FULL_BATTERY;
-    }
-    else if (batteryPercent >= 100)
-    {
-        STATUS_BATTERY = CHARGING;
-    }
-    return batteryPercent;
-}
-
 void mimirOpen::checkBSECStatus()
 {
     String output;
@@ -754,7 +666,6 @@ void mimirOpen::checkBSECStatus()
 systems mimirOpen::getStatus()
 {
     systems current;
-    current.batteryPercent = getBatteryPercent(getBatteryVoltage());
     current.battery = STATUS_BATTERY;
     current.sd = STATUS_SD;
     current.server = STATUS_SERVER;
@@ -906,19 +817,6 @@ void mimirOpen::logData(envData data, String filename)
     appendFile(SD, filename.c_str(), stringData(data, status).c_str());
 }
 
-String mimirOpen::packageAuthJSON(AuthPackage auth)
-{
-    DynamicJsonDocument package(1024);
-    String output;
-
-    package["email"] = auth.email;
-    package["serialNumber"] = auth.serialNumber;
-    package["macAddress"] = auth.macAddress;
-
-    serializeJsonPretty(package, output);
-    return output;
-}
-
 String mimirOpen::packageJSON(DataPackage _data)
 {
     DynamicJsonDocument package(1024);
@@ -927,17 +825,16 @@ String mimirOpen::packageJSON(DataPackage _data)
     JsonObject auth = package.createNestedObject("auth");
     auth["userId"] = _data.auth.userId;
     auth["deviceId"] = _data.auth.deviceId;
-    auth["serialNumber"] = _data.auth.serialNumber;
+    auth["email"] = _data.auth.email;
     auth["macAddress"] = _data.auth.macAddress;
 
     JsonObject status = package.createNestedObject("status");
-    status["Date"] = DateStr;
-    status["Time"] = TimeStr;
-    status["battery"] = _data.status.battery;
-    status["batteryPercent"] = _data.status.batteryPercent;
-    status["wifi"] = _data.status.wifi;
-    status["sd"] = _data.status.sd;
-    status["server"] = _data.status.server;
+    status["DATE"] = DateStr;
+    status["TIME"] = TimeStr;
+    status["BATTERY"] = _data.status.battery;
+    status["WIFI"] = _data.status.wifi;
+    status["DS"] = _data.status.sd;
+    status["SERVER"] = _data.status.server;
     status["BME680"] = _data.status.BME680;
     status["LSM303"] = _data.status.LSM303;
     status["SHT31"] = _data.status.SHT31;
@@ -956,6 +853,8 @@ String mimirOpen::packageJSON(DataPackage _data)
     data["eVOC"] = _data.data.eVOC;
     data["eCO2"] = _data.data.eCO2;
     data["bearing"] = _data.data.bearing;
+    data["batteryVoltage"] = _data.data.batteryVoltage;
+    data["batteryPercent"] = _data.data.batteryPercentage;
 
     serializeJsonPretty(package, output);
     return output;
@@ -966,8 +865,6 @@ String mimirOpen::stringData(envData data, systems status)
     return DateStr + "," +
            TimeStr + "," +
            status.battery +
-           "," +
-           status.batteryPercent +
            "," +
            status.wifi +
            "," +
@@ -1001,24 +898,28 @@ String mimirOpen::stringData(envData data, systems status)
            "," +
            data.eCO2 +
            "," +
-           data.bearing + "\r\n";
+           data.bearing +
+           "," +
+           data.batteryVoltage +
+           "," +
+           data.batteryPercentage + "\r\n";
 }
 
 String mimirOpen::header()
 {
-    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,iaqAccuracy,eVOC,eCO2,bearing\r\n";
+    String output = "date,time,battery,batteryPercent,wifi,sd,server,BME680,COMPAS,SHT31,VEML6030,temperature,humidity,pressure,altitude,luminance,iaq,iaqAccuracy,eVOC,eCO2,bearing,batteryVoltage,batteryPercentage\r\n";
     return output;
 }
 
 void mimirOpen::WiFiCallback(WiFiManager *myWiFiManager)
 {
-    pixel.SetPixelColor(1,black);
-    pixel.SetPixelColor(2,black);
-    pixel.SetPixelColor(3,black);
-    pixel.SetPixelColor(4,black);
-    pixel.SetPixelColor(5,yellow);
+    pixel.SetPixelColor(1, black);
+    pixel.SetPixelColor(2, black);
+    pixel.SetPixelColor(3, black);
+    pixel.SetPixelColor(4, black);
+    pixel.SetPixelColor(5, yellow);
     pixel.Show();
-    
+
     Serial.println("-WiFiConfig-");
     Serial.println("----Mode----");
     Serial.println();

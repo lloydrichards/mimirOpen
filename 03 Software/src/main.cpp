@@ -19,16 +19,16 @@
 
 mimirOpen mimir(115200);
 DataPackage sendData;
-AuthPackage sendAuth;
 
 RgbColor RED(128, 0, 0);
-RgbColor YELLOW(64, 64, 0);
-RgbColor GREEN(0, 128, 0);
+RgbColor YELLOW(32, 32, 0);
+RgbColor GREEN(0, 64, 0);
+RgbColor BLACK(0, 0, 0);
 
 RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR bool offlineMode = false;
 RTC_DATA_ATTR uint8_t BSECState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 RTC_DATA_ATTR int64_t BSECTime = 0;
-
 
 void setup()
 {
@@ -52,11 +52,25 @@ void setup()
     //     mimir.printBootReason();
     //     return;
     // }
-    //mimir.i2cScanner();
-    String filename = "/"+mimir.dateToString()+".txt";
+    if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(MONITOR_PIN) == LOW)
+    {
+        offlineMode = !offlineMode;
+
+        mimir.turnOFFPixels();
+        if (offlineMode)
+        {
+            Serial.println("Offline Mode");
+        }
+        else
+        {
+            Serial.println("Online Mode");
+        }
+    }
+    mimir.i2cScanner();
+    String filename = "/" + mimir.dateToString() + ".txt";
     Serial.println(filename);
     config config = mimir.initSPIFFS();
-    
+
     if (bootCount == 0)
     {
         mimir.initPixels();
@@ -70,6 +84,7 @@ void setup()
     else
     {
         mimir.initSensors(BSECState, BSECTime);
+        mimir.initMicroSD(filename);
     }
 
     envData data = mimir.readSensors(BSECState, BSECTime);
@@ -98,47 +113,32 @@ void setup()
     ///////////////////////////////////////////////////
     ///////////////////////ON BOOT/////////////////////
     ///////////////////////////////////////////////////
-    if (bootCount == 0)
+    if (bootCount == 0 && !offlineMode)
     {
         mimir.pixelSystemStatus(WIFI, YELLOW);
         mimir.initWIFI(&config) ? mimir.pixelSystemStatus(WIFI, GREEN) : mimir.pixelSystemStatus(WIFI, RED);
 
-        sendData.auth.deviceId = config.deviceId;
+        sendData.auth.deviceId = mimir.getDeviceId();
         sendData.auth.userId = config.userId;
-        sendData.auth.serialNumber = config.serialNumber;
+        sendData.auth.email = config.email;
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
+        sendData.status.bootCount = bootCount;
         sendData.data = data;
 
-        sendAuth.email = config.email;
-        sendAuth.serialNumber = config.serialNumber;
-        sendAuth.macAddress = WiFi.macAddress();
-
-        mimir.logData(data, filename);
-
-        mimir.WiFi_ON();
-        mimir.pixelSystemStatus(SERVER, YELLOW);
-        if (mimir.sendAuth("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/auth", sendAuth, &config))
-        {
-            mimir.pixelSystemStatus(SERVER, GREEN);
-            mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
-        }
-        else
-        {
-            mimir.pixelSystemStatus(SERVER, RED);
-        }
         mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////
     //////////////////////SEND DATA////////////////////
     ///////////////////////////////////////////////////
-    if (bootCount % 3 == 0 && bootCount != 0)
+    if (bootCount % 3 == 0 && bootCount != 0 && !offlineMode)
     {
-        sendData.auth.deviceId = config.deviceId;
+        sendData.auth.deviceId = mimir.getDeviceId();
         sendData.auth.userId = config.userId;
-        sendData.auth.serialNumber = config.serialNumber;
+        sendData.auth.email = config.email;
         sendData.auth.macAddress = WiFi.macAddress();
         sendData.status = mimir.getStatus();
+        sendData.status.bootCount = bootCount;
         sendData.data = data;
         //Everything that happens with the server happens in here
         mimir.WiFi_ON();
@@ -149,14 +149,16 @@ void setup()
     /////////////////////SLEEP TIME////////////////////
     ///////////////////////////////////////////////////
 
+    mimir.logData(data, filename);
     mimir.saveToSPIFFS(config);
     Serial.println("\n-----------------");
     mimir.printTimeDate();
+    Serial.print("Device ID: ");
+    Serial.println(mimir.getDeviceId());
     Serial.print("Boot Count: ");
     Serial.println(bootCount);
     bootCount++;
     mimir.SLEEP(5);
 }
 
-void loop(){
-};
+void loop(){};
