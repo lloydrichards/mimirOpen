@@ -25,6 +25,8 @@ RgbColor YELLOW(32, 32, 0);
 RgbColor GREEN(0, 64, 0);
 RgbColor BLACK(0, 0, 0);
 
+String sensorReading = "https://us-central1-mimir-app-dev.cloudfunctions.net/sensorReadings/";
+
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR bool offlineMode = false;
 RTC_DATA_ATTR uint8_t BSECState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
@@ -126,6 +128,9 @@ void setup()
         sendData.status.bootCount = bootCount;
         sendData.data = data;
 
+        mimir.pixelSystemStatus(SERVER, YELLOW);
+        mimir.WiFi_ON();
+        mimir.sendData(sensorReading, sendData, &config) ? mimir.pixelSystemStatus(SERVER, GREEN) : mimir.pixelSystemStatus(SERVER, RED);
         mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////
@@ -142,7 +147,7 @@ void setup()
         sendData.data = data;
         //Everything that happens with the server happens in here
         mimir.WiFi_ON();
-        mimir.sendData("https://us-central1-mimirhome-app.cloudfunctions.net/dataTransfer/add", sendData, &config);
+        mimir.sendData(sensorReading, sendData, &config);
         mimir.WiFi_OFF();
     }
     ///////////////////////////////////////////////////

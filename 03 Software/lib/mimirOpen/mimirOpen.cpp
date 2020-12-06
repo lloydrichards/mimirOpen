@@ -474,15 +474,11 @@ bool mimirOpen::sendData(String address, DataPackage data, config *config)
             Serial.println("Successful Sent Data!");
             Serial.println(response);
             deserializeJson(doc, response);
-            const char *userId = doc["userId"];
-            int receivedMode = doc["currentMode"];
+            const char *userId = doc["user_id"];
             Serial.print("User ID: ");
             Serial.println(userId);
-            Serial.print("Received Mode: ");
-            Serial.println(receivedMode);
 
             config->userId = userId;
-            config->mode = receivedMode;
             connected = true;
         }
         else
@@ -555,7 +551,7 @@ String mimirOpen::getDeviceId()
     byte mac[6];
     esp_efuse_read_mac(mac);
 
-    String deviceId = VERSION + String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+    String deviceId = VERSION + String(mac[5], HEX) + String(mac[3], HEX) + String(mac[2], HEX) + String(mac[1], HEX) + String(mac[4], HEX) + String(mac[0], HEX) + String(mac[1], HEX)+ String(mac[4], HEX);
     return deviceId;
 };
 
@@ -823,22 +819,24 @@ String mimirOpen::packageJSON(DataPackage _data)
     String output;
 
     JsonObject auth = package.createNestedObject("auth");
-    auth["userId"] = _data.auth.userId;
-    auth["deviceId"] = _data.auth.deviceId;
+    auth["user_id"] = _data.auth.userId;
+    auth["device_id"] = _data.auth.deviceId;
     auth["email"] = _data.auth.email;
     auth["macAddress"] = _data.auth.macAddress;
 
     JsonObject status = package.createNestedObject("status");
-    status["DATE"] = DateStr;
-    status["TIME"] = TimeStr;
-    status["BATTERY"] = _data.status.battery;
-    status["WIFI"] = _data.status.wifi;
-    status["DS"] = _data.status.sd;
-    status["SERVER"] = _data.status.server;
+    status["date"] = DateStr;
+    status["time"] = TimeStr;
+    status["bootCount"] = _data.status.bootCount;
+    status["battery"] = _data.status.battery;
+    status["wifi"] = _data.status.wifi;
+    status["sd"] = _data.status.sd;
+    status["server"] = _data.status.server;
     status["BME680"] = _data.status.BME680;
     status["LSM303"] = _data.status.LSM303;
     status["SHT31"] = _data.status.SHT31;
     status["VEML6030"] = _data.status.VEML6030;
+    status["LC709"] = _data.status.LC709;
     status["MODE"] = _data.status.MODE;
 
     JsonObject data = package.createNestedObject("data");
