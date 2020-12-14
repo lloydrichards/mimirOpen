@@ -191,7 +191,7 @@ bool mimirOpen::initMicroSD(String filename)
     {
         Serial.println("File doesn't exist");
         Serial.println("Creating file...");
-        writeFile(SD, filename.c_str(), "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(CCS811),tVOC(CCS811),bearing(Compass); \r\n");
+        writeFile(SD, filename.c_str(), "Date,Time,Battery(%),Temperature(SHT31_L),Temperature(SHT31_H),Temperature(BMP280),Altitude(BMP280),Humidity(SHT31_L),Humidity(SHT31_H),Pressure(BMP280),Luminance(VEML6030),UVA(VEML6075),UVB(VEML6075),UVIndex(VEML6075),eCO2(BME680),tVOC(CCS811),bearing(Compass); \r\n");
         connected = true;
     }
     else
@@ -224,7 +224,13 @@ bool mimirOpen::initWIFI(config *config)
     wifiManager.setAPCallback(WiFiCallback);
     wifiManager.setConfigPortalTimeout(180);
     wifiManager.setConnectTimeout(30);
-    wifiManager.autoConnect("mimirOpen WIFI");
+    if (!wifiManager.autoConnect("mimirOpen WIFI"))
+    {
+        Serial.println("failed to connect and hit timeout");
+        delay(3000);
+        Serial.println("Going to sleep now");
+        SLEEP(5);
+    }
 
     if (WiFi.status() == WL_CONNECTED)
     {
@@ -551,7 +557,7 @@ String mimirOpen::getDeviceId()
     byte mac[6];
     esp_efuse_read_mac(mac);
 
-    String deviceId = VERSION + String(mac[5], HEX) + String(mac[3], HEX) + String(mac[2], HEX) + String(mac[1], HEX) + String(mac[4], HEX) + String(mac[0], HEX) + String(mac[1], HEX)+ String(mac[4], HEX);
+    String deviceId = VERSION + String(mac[5], HEX) + String(mac[3], HEX) + String(mac[2], HEX) + String(mac[1], HEX) + String(mac[4], HEX) + String(mac[0], HEX) + String(mac[1], HEX) + String(mac[4], HEX);
     return deviceId;
 };
 
@@ -931,7 +937,15 @@ void mimirOpen::WiFi_ON()
 {
 
     WiFiManager wifiManager;
-    wifiManager.autoConnect("mimirAP");
+    wifiManager.setConfigPortalTimeout(30);
+    wifiManager.setConnectTimeout(30);
+    if (!wifiManager.autoConnect("mimirAP"))
+    {
+        Serial.println("failed to connect and hit timeout");
+        delay(3000);
+        Serial.println("Going to sleep now");
+        SLEEP(5);
+    }
     wifi_signal = WiFi.RSSI();
     SetupTime();
 };
