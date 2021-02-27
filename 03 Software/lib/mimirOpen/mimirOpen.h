@@ -162,7 +162,7 @@ public:
     void testPixels(int repeat = 5, int _delay = 100);
 
 private:
-    String VERSION = "-V1.30-";
+    String VERSION = "131V";
     String TimeStr, DateStr, ErrorMessage; // strings to hold time and date
     const char *TZ_INFO = "CET-1CEST,M3.5.0,M10.5.0/3";
 

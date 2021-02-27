@@ -205,21 +205,24 @@ bool mimirOpen::initMicroSD(String filename)
 bool mimirOpen::initWIFI(config *config)
 {
     bool connected = false;
+
+    String deviceID = "<p>Device ID: <b>" + getDeviceId() + "</b></p>";
+
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
-    WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
+    WiFiManagerParameter device_id(deviceID.c_str());
 
     WiFiManager wifiManager;
 
     wifiManager.setDebugOutput(true);
 
-    wifiManager.setCustomHeadElement("<script>Array.prototype.forEach.call(document.body.querySelectorAll('*[data-mask]'), applyDataMask); function applyDataMask(field) {var mask = field.dataset.mask.split('');function stripMask(maskedData){function isDigit(char){    return /\d /.test(char);}return maskedData.split('').filter(isDigit);} function applyMask(data){    return mask.map(function(char) {if (char != '_')    return char;if (data.length == 0)    return char;return data.shift();               })        .join('')} function reapplyMask(data){return applyMask(stripMask(data));}function changed(){var oldStart = field.selectionStart;var oldEnd = field.selectionEnd;field.value = reapplyMask(field.value);field.selectionStart = oldStart;field.selectionEnd = oldEnd;}field.addEventListener('click', changed)field.addEventListener('keyup', changed)}</script>");
+    wifiManager.setCustomHeadElement("<script>Array.prototype.forEach.call(document.body.querySelectorAll('*[data-mask]'), applyDataMask); function applyDataMask(field) {var mask = field.dataset.mask.split('');function stripMask(maskedData){function isDigit(char){    return /\d /.test(char);}return maskedData.split('').filter(isDigit);} function applyMask(data){    return mask.map(function(char) {if (char != '_')    return char;if (data.length == 0)    return char;return data.shift();               })        .join('')} function reapplyMask(data){return applyMask(stripMask(data));}function changed(){var oldStart = field.selectionStart;var oldEnd = field.selectionEnd;field.value = reapplyMask(field.value);field.selectionStart = oldStart;field.selectionEnd = oldEnd;}field.addEventListener('click', changed)field.addEventListener('keyup', changed)} defer</script>");
     wifiManager.setCustomHeadElement("<style></style>");
     wifiManager.addParameter(&introduction);
     wifiManager.addParameter(&custom_EMAIL);
     wifiManager.addParameter(&custom_DEVICE_NAME);
-    wifiManager.addParameter(&contact);
+    wifiManager.addParameter(&device_id);
 
     wifiManager.setAPCallback(WiFiCallback);
     wifiManager.setConfigPortalTimeout(180);
@@ -248,10 +251,12 @@ bool mimirOpen::initWIFI(config *config)
 
 void mimirOpen::forceWIFI(config *config)
 {
+    String deviceID = "<p>Device ID: <b>" + getDeviceId() + "</b></p>";
+
     WiFiManagerParameter custom_EMAIL("Email", "Email", config->email.c_str(), 40, " type='email'");
     WiFiManagerParameter custom_DEVICE_NAME("Device Name", "Device Name", config->deviceName.c_str(), 40);
     WiFiManagerParameter introduction("<div><h3>Setting Up</h3><p>Lets get you setup with your new device!</p><ol><li>Go to the mimirHome app and add the device to your portal (SerialNumber is on the back of device)</li><li>Select your wifi network and enter you SSID password.</li><li>Enter you user infomation below and hit 'Save'</li><li>You will see some lights flash and when all are green then you are good to go!</li></ol></div>");
-    WiFiManagerParameter contact("<p>This is just a text paragraph</p>");
+    WiFiManagerParameter device_id(deviceID.c_str());
 
     WiFiManager wifiManager;
 
@@ -260,7 +265,7 @@ void mimirOpen::forceWIFI(config *config)
     wifiManager.addParameter(&introduction);
     wifiManager.addParameter(&custom_EMAIL);
     wifiManager.addParameter(&custom_DEVICE_NAME);
-    wifiManager.addParameter(&contact);
+    wifiManager.addParameter(&device_id);
 
     wifiManager.setAPCallback(WiFiCallback);
     if (!wifiManager.startConfigPortal("mimirOpen Forced"))
@@ -554,10 +559,13 @@ bool mimirOpen::changeMode(config *config, int wait)
 
 String mimirOpen::getDeviceId()
 {
-    byte mac[6];
-    esp_efuse_read_mac(mac);
+    uint32_t chipId = 0;
 
-    String deviceId = VERSION + String(mac[5], HEX) + String(mac[3], HEX) + String(mac[2], HEX) + String(mac[1], HEX) + String(mac[4], HEX) + String(mac[0], HEX) + String(mac[1], HEX) + String(mac[4], HEX);
+    for(int i=0; i<17; i=i+8) {
+	  chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
+	}
+
+    String deviceId = VERSION + ":" + chipId;
     return deviceId;
 };
 
@@ -960,9 +968,10 @@ void mimirOpen::SLEEP(long interval)
     //CONFIG Sleep Pin
     Serial.println("Config Sleep Pin");
     //---SINGLE GPIO PIN---
-    gpio_pullup_en(GPIO_NUM_26);
-    gpio_pulldown_dis(GPIO_NUM_26);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
+    // gpio_pullup_en(GPIO_NUM_26);
+    // gpio_pulldown_dis(GPIO_NUM_26);
+    // esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, LOW);
+
     //---MULTI GPIO PIN---
     //****This will need pull up resistors on the other end of the buttons so they pull high, not low
     //GPIO Mask = 2^25+2^26+2^27 = 234881024 => 0xE000000

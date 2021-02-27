@@ -21,6 +21,7 @@ mimirOpen mimir(115200);
 DataPackage sendData;
 
 RgbColor RED(128, 0, 0);
+RgbColor BLUE(0, 0, 128);
 RgbColor YELLOW(32, 32, 0);
 RgbColor GREEN(0, 64, 0);
 RgbColor BLACK(0, 0, 0);
@@ -54,20 +55,11 @@ void setup()
     //     mimir.printBootReason();
     //     return;
     // }
-    if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(MONITOR_PIN) == LOW)
-    {
-        offlineMode = !offlineMode;
+    Serial.println("\n---------------------------");
+    Serial.print("Device ID: ");
+    Serial.println(mimir.getDeviceId());
+    Serial.println("---------------------------\n");
 
-        mimir.turnOFFPixels();
-        if (offlineMode)
-        {
-            Serial.println("Offline Mode");
-        }
-        else
-        {
-            Serial.println("Online Mode");
-        }
-    }
     mimir.i2cScanner();
     String filename = "/" + mimir.dateToString() + ".txt";
     Serial.println(filename);
@@ -89,6 +81,22 @@ void setup()
         mimir.initMicroSD(filename);
     }
 
+    if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(MONITOR_PIN) == LOW)
+    {
+        offlineMode = !offlineMode;
+
+        mimir.turnOFFPixels();
+        if (offlineMode)
+        {
+            Serial.println("Offline Mode");
+            mimir.pixelSystemStatus(WIFI, YELLOW);
+        }
+        else
+        {
+            Serial.println("Online Mode");
+            mimir.pixelSystemStatus(WIFI, BLUE);
+        }
+    }
     envData data = mimir.readSensors(BSECState, BSECTime);
     mimir.printSensors(data);
 
@@ -107,7 +115,6 @@ void setup()
     ///////////////////////////////////////////////////
     if (digitalRead(ENVIRO_PIN) == LOW && digitalRead(RADAR_PIN) == LOW)
     {
-        mimir.initPixels();
         Serial.println("\nEntering Forced Mode");
         mimir.forceWIFI(&config);
     }
