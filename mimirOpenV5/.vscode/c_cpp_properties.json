@@ -8,8 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/include",
-                "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/src",
+                "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/include",
+                "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/src",
                 "C:/Users/lr/.platformio/packages/framework-espidf/components/xtensa/include",
                 "C:/Users/lr/.platformio/packages/framework-espidf/components/xtensa/esp32s2/include",
                 "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/config",
@@ -114,8 +114,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/include",
-                    "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/src",
+                    "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/include",
+                    "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/src",
                     "C:/Users/lr/.platformio/packages/framework-espidf/components/xtensa/include",
                     "C:/Users/lr/.platformio/packages/framework-espidf/components/xtensa/esp32s2/include",
                     "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/config",
@@ -222,7 +222,7 @@
                 "_GNU_SOURCE",
                 "IDF_VER=\"3.40200.210118\"",
                 "ESP_PLATFORM",
-                "PLATFORMIO=50101",
+                "PLATFORMIO=50205",
                 ""
             ],
             "cStandard": "c99",

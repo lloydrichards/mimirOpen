@@ -1,4 +1,4 @@
-/* * Data converted from C:\Users\lr\Documents\GitHub\mimirOpen\mimirOpenV5\.pio\build\esp32-s2-saola-1\x509_crt_bundle
+/* * Data converted from c:\Users\lr\Documents\GitHub\mimirOpen\mimirOpenV5\.pio\build\esp32-s2-saola-1\x509_crt_bundle
  */
 .data
 .section .rodata.embedded

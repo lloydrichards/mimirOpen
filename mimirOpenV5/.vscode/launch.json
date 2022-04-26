@@ -12,7 +12,7 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/firmware.elf",
+            "executable": "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/firmware.elf",
             "projectEnvName": "esp32-s2-saola-1",
             "toolchainBinDir": "C:/Users/lr/.platformio/packages/toolchain-xtensa32s2/bin",
             "internalConsoleOptions": "openOnSessionStart",
@@ -25,10 +25,20 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "C:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/firmware.elf",
+            "executable": "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/firmware.elf",
             "projectEnvName": "esp32-s2-saola-1",
             "toolchainBinDir": "C:/Users/lr/.platformio/packages/toolchain-xtensa32s2/bin",
             "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "type": "platformio-debug",
+            "request": "launch",
+            "name": "PIO Debug (without uploading)",
+            "executable": "c:/Users/lr/Documents/GitHub/mimirOpen/mimirOpenV5/.pio/build/esp32-s2-saola-1/firmware.elf",
+            "projectEnvName": "esp32-s2-saola-1",
+            "toolchainBinDir": "C:/Users/lr/.platformio/packages/toolchain-xtensa32s2/bin",
+            "internalConsoleOptions": "openOnSessionStart",
+            "loadMode": "manual"
         }
     ]
 }
